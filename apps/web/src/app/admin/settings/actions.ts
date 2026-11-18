@@ -13,5 +13,6 @@ export async function updateSettings(_prev: SettingsState, formData: FormData): 
   if (Object.keys(errors).length) return { status: "error", message: "Please fix the highlighted fields.", errors };
   const changed = await saveSettings(getPrisma(), values, s.userId, s.organizationId);
   revalidatePath("/admin/settings");
+  if (changed.length) revalidatePath("/", "layout"); // refresh the public footer and contact page
   return { status: "saved", message: changed.length ? `Saved ${changed.length} change(s).` : "Nothing changed." };
 }

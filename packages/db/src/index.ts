@@ -6,6 +6,8 @@ export * from "./generated/client";
 export * from "./enquiries";
 export * from "./workspace";
 export * from "./admin";
+export * from "./careers";
+export * from "./insights";
 export { provisionOrganizationRoles, syncPermissions } from "./provision";
 
 export function createPrisma(connectionString = process.env.DATABASE_URL): PrismaClient {

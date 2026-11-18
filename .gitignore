@@ -18,6 +18,7 @@ backups/
 uploads/
 storage/
 private-documents/
+.data/
 # generated
 packages/db/src/generated/
 *.tsbuildinfo

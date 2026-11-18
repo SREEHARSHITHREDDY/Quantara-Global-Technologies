@@ -12,6 +12,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const links = [
     { href: "/admin", label: "Overview", show: true },
     { href: "/admin/enquiries", label: "Enquiries", show: can(s.ctx, "enquiry:read") },
+    { href: "/admin/insights", label: "Insights", show: can(s.ctx, "insight:write") },
+    { href: "/admin/jobs", label: "Jobs", show: can(s.ctx, "job:write") },
+    { href: "/admin/applications", label: "Applications", show: can(s.ctx, "application:read") },
     { href: "/admin/settings", label: "Site settings", show: can(s.ctx, "site:settings:read") },
   ].filter((l) => l.show);
   return (

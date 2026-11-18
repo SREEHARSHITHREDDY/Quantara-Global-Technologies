@@ -11,6 +11,7 @@ const securityHeaders = [
 
 const config: NextConfig = {
   reactStrictMode: true,
+  experimental: { serverActions: { bodySizeLimit: "6mb" } }, // resumes are accepted up to 5 MB
   poweredByHeader: false,
   transpilePackages: ["@quantara/content", "@quantara/rbac", "@quantara/db"],
   serverExternalPackages: ["pg", "@node-rs/argon2"],
