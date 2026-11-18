@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "./generated/client";
 
 export * from "./generated/client";
+export * from "./enquiries";
 export { provisionOrganizationRoles, syncPermissions } from "./provision";
 
 export function createPrisma(connectionString = process.env.DATABASE_URL): PrismaClient {

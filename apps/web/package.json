@@ -10,25 +10,27 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "^5.2.0",
+    "@fontsource-variable/manrope": "^5.2.0",
+    "@quantara/content": "workspace:*",
+    "@quantara/db": "workspace:^",
+    "@quantara/rbac": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.552.0",
     "next": "16.4.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "@fontsource-variable/inter": "^5.2.0",
-    "@fontsource-variable/manrope": "^5.2.0",
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
     "tailwind-merge": "^3.3.0",
-    "lucide-react": "^0.552.0",
-    "@quantara/content": "workspace:*",
-    "@quantara/rbac": "workspace:*"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
-    "tailwindcss": "^4.3.5",
-    "typescript": "^5.9.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.0",
     "vitest": "^5.1.1"
   }
 }

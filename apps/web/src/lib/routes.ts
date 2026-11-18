@@ -5,7 +5,7 @@ import { industries, services } from "@quantara/content";
  * site never ships dead links while it is built in stages. Add a route here in the same change
  * that adds its page. A unit test checks that every entry has a page file.
  */
-export const LIVE_STATIC_ROUTES = ["/", "/services", "/industries"] as const;
+export const LIVE_STATIC_ROUTES = ["/", "/about", "/services", "/industries", "/approach", "/contact", "/privacy-policy", "/terms", "/cookie-policy"] as const;
 
 export function isLive(path: string): boolean {
   if ((LIVE_STATIC_ROUTES as readonly string[]).includes(path)) return true;

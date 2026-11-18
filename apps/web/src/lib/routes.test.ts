@@ -27,7 +27,8 @@ describe("routes", () => {
     for (const s of SERVICE_SLUGS) expect(isLive(`/services/${s}`)).toBe(true);
     for (const i of INDUSTRY_SLUGS) expect(isLive(`/industries/${i}`)).toBe(true);
     expect(isLive("/services/not-real")).toBe(false);
-    expect(isLive("/contact")).toBe(false);
+    expect(isLive("/contact")).toBe(true);
+    expect(isLive("/careers")).toBe(false);
   });
   it("navigation never contains a link to a page that does not exist", () => {
     for (const item of liveOnly(MAIN_NAV)) expect(isLive(item.href), item.href).toBe(true);

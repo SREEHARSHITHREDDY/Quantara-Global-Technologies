@@ -17,7 +17,7 @@ export async function syncPermissions(db: Db): Promise<void> {
 export async function provisionOrganizationRoles(db: Db, organizationId: string): Promise<void> {
   await syncPermissions(db);
   const perms = await db.permission.findMany({ select: { id: true, key: true } });
-  const permId = new Map(perms.map((p) => [p.key as string, p.id]));
+  const permId = new Map(perms.map((p: { key: string; id: string }) => [p.key, p.id] as const));
   for (const def of Object.values(ROLES)) {
     const role = await db.role.upsert({
       where: { organizationId_key: { organizationId, key: def.key } },

@@ -36,8 +36,19 @@ Site shell (header with mobile menu, footer), real homepage, `/services` + 9 ser
 Links to routes that do not exist yet (About, Approach, Insights, Careers, Contact, Council, legal) are hidden by `lib/routes.ts` until their pages are added. Footer shows no contact details: CMS-managed, not wired yet. Homepage "Latest insights" is omitted until published insights exist.
 Not yet browser-tested visually (no browser here); review the look locally with `pnpm dev`.
 
+## Phase 2 (public website), stage 2: built; database parts UNVERIFIED 🟡
+Pages built and crawled in a production build (28 pages, no broken links): `/about`, `/approach`, `/contact`, `/privacy-policy`, `/terms`, `/cookie-policy`.
+Contact form: validation (zod), explicit consent with versioned wording, honeypot, minimum-fill-time check and link-stuffing score (spam is stored with status SPAM but looks identical to the sender), per-IP and per-email rate limits, idempotency key (double submit returns the same reference), IP stored only as a salted hash.
+* ✅ Verified here (no database): validation and spam/rate-limit logic (18 web tests with fakes), reference-id and rate-window helpers (2 tests), typecheck, production build.
+* ✅ Verified by owner on real PostgreSQL 15: `typecheck:db` passes; `createEnquiry` (storage, service/industry linking, idempotency incl. concurrent submits, SPAM status) and `hitRateLimit` (limit, window rollover, atomic concurrent counting) pass. 37/38 on first run; the 1 failure was a wrong test assumption (enquiries have no DB lower-case CHECK); `createEnquiry` now normalises the email instead. Re-run `pnpm test:db` to confirm 38/38.
+* 🟡 Server action end-to-end (browser submit to database) has not been run. Do it locally: `pnpm dev`, submit the form, then check the `ContactEnquiry` table.
+* ⏳ Not sent: confirmation email to the sender and notification email to admins (no email provider configured). The confirmation page shows the reference number and does not claim an email was sent.
+* ❌ No CAPTCHA/Turnstile yet (planned for the security phase). Rate limiting and honeypot are the only bot defences today.
+* Operational: set `APP_IP_HASH_SALT` in production (the action refuses to run without it). Old `RateLimitBucket` rows need the retention job (not built). Behind a proxy, `X-Forwarded-For` must be set by a trusted hop.
+* Legal pages are working text that describe what the site does today. **They must be reviewed by qualified counsel before launch** and updated when cookies, analytics or the Council's accounts are added. They contain no governing-law clause.
+
 ## Not built ❌
-Remaining public routes: /about, /approach, /insights(+slug), /careers(+job), /contact, /privacy-policy, /terms, /cookie-policy · forms/backend endpoints · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
+Remaining public routes: /insights(+slug), /careers(+job) · careers application and newsletter forms · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
 
 ## Findings needing attention
 * Model count is **55**, not ~60.

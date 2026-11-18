@@ -12,7 +12,8 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  transpilePackages: ["@quantara/content", "@quantara/rbac"],
+  transpilePackages: ["@quantara/content", "@quantara/rbac", "@quantara/db"],
+  serverExternalPackages: ["pg"],
   async headers() { return [{ source: "/:path*", headers: securityHeaders }]; },
 };
 export default config;
