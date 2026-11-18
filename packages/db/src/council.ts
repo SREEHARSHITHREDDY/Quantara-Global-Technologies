@@ -307,3 +307,9 @@ export async function listExecutionsForUser(db: PrismaClient, a: { organizationI
   });
   return rows.map((r) => ({ ...r, prompt: clip(r.prompt, 160) }));
 }
+
+export type ReportAccessAction = "council.report.viewed" | "council.report.exported";
+/** Who looked at or exported a report. Written to the append-only audit log. */
+export async function recordReportAccess(db: PrismaClient, a: { organizationId: string; actorId: string; executionId: string; action: ReportAccessAction; format?: string; ownerId: string }): Promise<void> {
+  await db.auditLog.create({ data: { organizationId: a.organizationId, actorId: a.actorId, action: a.action, resourceType: "execution", resourceId: a.executionId, metadata: { ownerId: a.ownerId, ...(a.format ? { format: a.format } : {}) } } });
+}

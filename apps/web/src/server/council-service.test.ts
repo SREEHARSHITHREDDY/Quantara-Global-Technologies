@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { FREE_RATE, type ProviderId } from "@quantara/council";
+import { AGENT_CODES, FREE_RATE, MemoryStore, MockProvider, runExecution, type AgentCode, type ProviderId } from "@quantara/council";
 import type { ExecutionView, ReserveInput } from "@quantara/db";
 import type { MembershipContext } from "@quantara/rbac";
-import { cancelConsultation, readConsultation, startConsultation, type Caller, type StartDeps } from "./council-service";
+import { cancelConsultation, exportConsultation, readConsultation, startConsultation, type Caller, type StartDeps } from "./council-service";
 
 const NOW = new Date("2026-11-18T10:00:00Z");
 const ctx = (role = "council_user"): MembershipContext => ({ role, orgType: "CLIENT", orgStatus: "ACTIVE", userBanned: false });
@@ -135,5 +135,49 @@ describe("readConsultation", () => {
   });
   it("refuses a record from a different organization even if the lookup returned it", async () => {
     expect(await readConsultation(caller(), "e1", reader(view({ organizationId: "o2" })))).toMatchObject({ ok: false, status: 404 });
+  });
+});
+
+describe("exportConsultation", () => {
+  async function fixture() {
+    const store = new MemoryStore();
+    await runExecution(store.record.id, { participants: [...AGENT_CODES] as AgentCode[], rate: FREE_RATE }, { provider: new MockProvider("success"), store });
+    const view: ExecutionView = { id: "exec-12345678", organizationId: "o1", userId: "u1", status: "SUCCEEDED", mode: "FULL_COUNCIL", prompt: "Open an office?", participants: [...AGENT_CODES], providerKey: "mock", templateId: null, error: null, tokensUsed: 1, costUsd: 0, reportReady: true, deadlineAt: null, createdAt: new Date("2026-11-18T10:00:00Z"), startedAt: null, finishedAt: null };
+    const audits: unknown[] = [];
+    const deps = { getView: async (_i: string, o: string) => (o === "o1" ? view : null), getResult: async () => JSON.parse(JSON.stringify(store.result)), audit: async (a: unknown) => { audits.push(a); } };
+    return { deps, audits, view };
+  }
+  it("returns the report and audits the export first", async () => {
+    const { deps, audits } = await fixture();
+    const r = await exportConsultation(caller(), "exec-12345678", "md", deps);
+    expect(r.ok && r.body).toContain("SIMULATED ANALYSIS");
+    expect(r.ok && r.filename).toBe("quantara-council-report-exec-123.md");
+    expect(audits).toEqual([{ organizationId: "o1", actorId: "u1", executionId: "exec-12345678", format: "md", ownerId: "u1" }]);
+  });
+  it("another user in the same organization cannot export someone else's report, and gets 404", async () => {
+    const { deps, audits } = await fixture();
+    const r = await exportConsultation({ ...caller(), userId: "u2" }, "exec-12345678", "html", deps);
+    expect(r).toMatchObject({ ok: false, status: 404 });
+    expect(audits).toHaveLength(0);
+  });
+  it("another organization gets 404", async () => {
+    const { deps } = await fixture();
+    expect(await exportConsultation({ ...caller(), organizationId: "o2" }, "exec-12345678", "md", deps)).toMatchObject({ ok: false, status: 404 });
+  });
+  it("refuses a role without the export permission, with no audit and no content", async () => {
+    const { deps, audits } = await fixture();
+    const r = await exportConsultation(caller("bd_manager"), "exec-12345678", "md", deps);
+    expect(r.ok).toBe(false);
+    expect(audits).toHaveLength(0);
+  });
+  it("fails closed when the audit cannot be written", async () => {
+    const { deps } = await fixture();
+    const r = await exportConsultation(caller(), "exec-12345678", "md", { ...deps, audit: async () => { throw new Error("db down"); } });
+    expect(r).toMatchObject({ ok: false, status: 503, code: "audit_unavailable" });
+  });
+  it("refuses a report that is not ready or is unreadable", async () => {
+    const { deps, view } = await fixture();
+    expect(await exportConsultation(caller(), "x", "md", { ...deps, getView: async () => ({ ...view, reportReady: false }) })).toMatchObject({ ok: false, status: 404 });
+    expect(await exportConsultation(caller(), "x", "md", { ...deps, getResult: async () => ({ junk: true }) })).toMatchObject({ ok: false, status: 422 });
   });
 });

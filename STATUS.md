@@ -113,7 +113,10 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | `listExecutionsForUser` (own history, or org-wide with `council:history:read:org`) | ⚠️ 2 database tests written, unrun |
 | `/council` (gates: signed out, no access, trial expired; start form; history), `/council/[id]` (live progress, result view, cancelled/failed states), nav link | ⚠️ typecheck only. **Never viewed in a browser**; live progress has not been run against a real worker |
 | Result view renders the stored consolidation (label banner, disagreements, assessments, risks, missing info, approvals, claim labels, caveats) | ⚠️ typecheck only |
-| Not yet: approvals actions, export, report access auditing | ❌ |
+| 20-section report builder (`buildReport`; sections with no covering executive say "Not assessed"; nothing invented; no roadmap or sustainability content is produced by the current analysis) | ⚠️ 4 unit tests pass in sandbox |
+| Export as Markdown or printable HTML (needs `council:report:export`, audited before content is returned, fails closed if the audit write fails, HTML escaped, sandboxed response headers) | ⚠️ 6 unit tests pass in sandbox; route never run in a browser |
+| Access audit: exports always, and views by anyone other than the owner (`council.report.viewed` / `.exported`) | ⚠️ 1 database test written, unrun |
+| Not yet: approvals actions, PDF export | ❌ |
 
 ## Header and staff access
 | Item | State |

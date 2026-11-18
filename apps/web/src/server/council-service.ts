@@ -4,6 +4,7 @@ import {
   type ConsultationMode, type ProviderId, type Rate,
 } from "@quantara/council";
 import type { CouncilOrgAccess, ExecutionView, ReserveInput, ReserveResult } from "@quantara/db";
+import { buildReport, parseConsolidated, reportToHtml, reportToMarkdown } from "@quantara/council";
 import { can, canReadCouncilRecord, type MembershipContext } from "@quantara/rbac";
 
 export interface Caller { userId: string; organizationId: string; ctx: MembershipContext }
@@ -117,4 +118,28 @@ export async function readConsultation(caller: Caller, executionId: string, deps
     error: view.error, createdAt: view.createdAt.toISOString(), finishedAt: view.finishedAt?.toISOString() ?? null,
     tokensUsed: view.tokensUsed, reportReady: view.reportReady, result,
   } };
+}
+
+export type ExportFormat = "md" | "html";
+export const isExportFormat = (v: string | null): v is ExportFormat => v === "md" || v === "html";
+
+/** Exports a finished report. Needs the export permission and read access to the record; every export is audited before any content is returned. */
+export async function exportConsultation(
+  caller: Caller, executionId: string, format: ExportFormat,
+  deps: { getView(id: string, orgId: string): Promise<ExecutionView | null>; getResult(id: string, orgId: string): Promise<unknown | null>; audit(a: { organizationId: string; actorId: string; executionId: string; format: ExportFormat; ownerId: string }): Promise<void> },
+): Promise<{ ok: true; filename: string; contentType: string; body: string } | ServiceError> {
+  const notFound = err(404, "not_found", "Report not found.");
+  const view = await deps.getView(executionId, caller.organizationId);
+  if (!view || !canReadCouncilRecord(caller.ctx, { ownerId: view.userId, organizationId: view.organizationId }, { userId: caller.userId, organizationId: caller.organizationId })) return notFound;
+  if (!can(caller.ctx, "council:report:export")) return err(403, "forbidden", "You do not have permission to export reports.");
+  if (!view.reportReady) return notFound;
+  const consolidated = parseConsolidated(await deps.getResult(executionId, caller.organizationId));
+  if (!consolidated) return err(422, "report_unreadable", "This report cannot be exported.");
+  try { await deps.audit({ organizationId: caller.organizationId, actorId: caller.userId, executionId, format, ownerId: view.userId }); }
+  catch { return err(503, "audit_unavailable", "The export could not be recorded, so it was not provided. Please try again."); }
+  const report = buildReport(consolidated, { prompt: view.prompt, mode: view.mode, participants: view.participants, templateId: view.templateId, createdAt: view.createdAt.toISOString() });
+  const base = `quantara-council-report-${view.id.slice(0, 8)}`;
+  return format === "md"
+    ? { ok: true, filename: `${base}.md`, contentType: "text/markdown; charset=utf-8", body: reportToMarkdown(report, consolidated) }
+    : { ok: true, filename: `${base}.html`, contentType: "text/html; charset=utf-8", body: reportToHtml(report, consolidated) };
 }

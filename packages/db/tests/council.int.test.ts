@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -256,5 +256,17 @@ describe("listExecutionsForUser", () => {
     expect(all).toHaveLength(2);
     expect(all.find((x) => x.userId === other.id)!.prompt.length).toBeLessThanOrEqual(161);
     expect(await listExecutionsForUser(db, { organizationId: t.org.id, userId: t.user.id, orgWide: true, limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe("report access audit", () => {
+  it("records who exported a report and whose it was", async () => {
+    const t = await tenant();
+    const r = await reserve(t); if (!r.ok) throw new Error("reserve");
+    await recordReportAccess(db, { organizationId: t.org.id, actorId: t.user.id, executionId: r.executionId, action: "council.report.exported", format: "md", ownerId: t.user.id });
+    const row = await db.auditLog.findFirstOrThrow({ where: { resourceId: r.executionId, action: "council.report.exported" } });
+    expect(row.organizationId).toBe(t.org.id);
+    expect(row.actorId).toBe(t.user.id);
+    expect(row.metadata).toMatchObject({ format: "md", ownerId: t.user.id });
   });
 });

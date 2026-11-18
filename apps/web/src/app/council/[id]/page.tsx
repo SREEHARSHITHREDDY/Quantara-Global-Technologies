@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getExecutionResult, getExecutionView, getPrisma } from "@quantara/db";
-import { canReadCouncilRecord } from "@quantara/rbac";
+import { buildReport, parseConsolidated } from "@quantara/council";
+import { getExecutionResult, getExecutionView, getPrisma, recordReportAccess } from "@quantara/db";
+import { can, canReadCouncilRecord } from "@quantara/rbac";
 import { PageHero } from "@/components/site/page-hero";
 import { Card, Container } from "@/components/ui/layout";
 import { getCouncilCaller } from "@/lib/council-caller";
 import { STAGE_LABELS } from "@/lib/council-progress";
 import { LiveProgress } from "./live-progress";
+import { ReportSections } from "./report-sections";
 import { ResultView } from "./result-view";
 
 export const metadata: Metadata = { title: "Consultation", robots: { index: false } };
@@ -26,6 +28,10 @@ export default async function ConsultationPage({ params }: { params: Promise<{ i
   if (!view || !canReadCouncilRecord(caller.ctx, { ownerId: view.userId, organizationId: view.organizationId }, { userId: caller.userId, organizationId: caller.organizationId })) notFound();
   const done = TERMINAL.includes(view.status);
   const result = done && view.reportReady ? await getExecutionResult(db, id, caller.organizationId) : null;
+  // Reading someone else's report (organization-wide history) is recorded.
+  if (result != null && view.userId !== caller.userId) await recordReportAccess(db, { organizationId: caller.organizationId, actorId: caller.userId, executionId: id, action: "council.report.viewed", ownerId: view.userId });
+  const consolidated = result != null ? parseConsolidated(result) : null;
+  const report = consolidated ? buildReport(consolidated, { prompt: view.prompt, mode: view.mode, participants: view.participants, templateId: view.templateId, createdAt: view.createdAt.toISOString() }) : null;
   return (
     <>
       <PageHero eyebrow="Executive Council" title={STAGE_LABELS[view.status] ?? view.status} description={view.prompt.length > 220 ? `${view.prompt.slice(0, 220)}…` : view.prompt} />
@@ -34,6 +40,7 @@ export default async function ConsultationPage({ params }: { params: Promise<{ i
           <p><Link href="/council" className="text-sm font-medium text-electric-600 underline">Back to the council</Link></p>
           {!done && <Card><LiveProgress executionId={view.id} initialParticipants={view.participants} /></Card>}
           {done && result != null && <ResultView result={result} />}
+          {report && <ReportSections report={report} canExport={can(caller.ctx, "council:report:export")} executionId={view.id} />}
           {done && result == null && (
             <Card>
               <p className="text-slate-700">{view.status === "CANCELLED" ? "This consultation was cancelled." : view.status === "TIMED_OUT" ? "This consultation ran out of time before it finished." : "This consultation did not produce a result."}</p>
