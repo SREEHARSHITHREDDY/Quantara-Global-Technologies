@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/manrope";
+
+/* ───── Quantara design tokens: premium enterprise (midnight navy + electric blue/cyan accents) ───── */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Manrope Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-navy-950: #060d1f;
+  --color-navy-900: #0a1630;
+  --color-navy-800: #0f1f45;
+  --color-navy-700: #172b5c;
+  --color-navy-600: #213a78;
+  --color-ink: #0b1220;
+  --color-slate-600: #475569;
+  --color-mist-50: #f7f9fc;
+  --color-mist-100: #eef2f8;
+  --color-mist-200: #dde4ef;
+  --color-mist-300: #c3cddd;
+  --color-electric-600: #1f5eff;
+  --color-electric-500: #3b73ff;
+  --color-electric-400: #6b97ff;
+  --color-cyan-500: #06b6d4;
+  --color-cyan-400: #22d3ee;
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(10 22 48 / 0.06), 0 8px 24px -12px rgb(10 22 48 / 0.18);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Controlled gradients: used sparingly (hero, dark sections) */
+@utility bg-hero { background-image: radial-gradient(1200px 520px at 80% -10%, rgb(59 115 255 / 0.28), transparent 60%), radial-gradient(900px 480px at 0% 110%, rgb(34 211 238 / 0.12), transparent 55%), linear-gradient(180deg, var(--color-navy-950), var(--color-navy-900)); }
+@utility text-gradient { background-image: linear-gradient(90deg, var(--color-electric-400), var(--color-cyan-400)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+html { scroll-behavior: smooth; }
+body { font-family: var(--font-sans); color: var(--color-ink); background: #fff; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
+:focus-visible { outline: 2px solid var(--color-electric-500); outline-offset: 3px; border-radius: 4px; }
+
+/* Purposeful motion only; fully disabled when the user asks for reduced motion */
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.animate-rise { animation: rise 600ms var(--ease-out-quart) both; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+}

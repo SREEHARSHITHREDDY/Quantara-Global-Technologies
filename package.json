@@ -8,10 +8,15 @@
   "scripts": {
     "dev": "pnpm --filter @quantara/web dev",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "typecheck": "pnpm -r --filter \"!@quantara/db\" typecheck",
+    "test": "pnpm -r --filter \"!@quantara/db\" test",
     "db:migrate": "pnpm --filter @quantara/db migrate:deploy",
-    "db:seed": "pnpm --filter @quantara/db seed"
+    "db:seed": "pnpm --filter @quantara/db seed",
+    "typecheck:db": "pnpm --filter @quantara/db typecheck",
+    "db:setup": "pnpm --filter @quantara/db migrate:setup",
+    "db:validate": "pnpm --filter @quantara/db validate:schema",
+    "test:db": "pnpm --filter @quantara/db test:integration",
+    "verify:offline": "pnpm db:validate && pnpm typecheck && pnpm test && pnpm --filter @quantara/web build"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

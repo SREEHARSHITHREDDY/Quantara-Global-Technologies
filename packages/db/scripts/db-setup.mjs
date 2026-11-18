@@ -22,7 +22,7 @@ const existing = () => readdirSync(migrations).filter((d) => /^\d{14}_/.test(d))
 // 1. Prisma-generated init migration (only if none exists yet)
 if (existing().length === 0) {
   console.log("→ generating init migration from schema.prisma");
-  run(["migrate", "dev", "--name", "init", "--skip-seed"]);
+  run(["migrate", "dev", "--name", "init"]); // Prisma 7: no implicit seed/generate, so no flags needed
 }
 // 2. Our SQL supplement as a separate, later migration (only once)
 if (!existing().some((d) => d.endsWith("_constraints"))) {
