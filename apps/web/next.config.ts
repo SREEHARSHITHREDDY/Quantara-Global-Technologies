@@ -13,7 +13,7 @@ const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@quantara/content", "@quantara/rbac", "@quantara/db"],
-  serverExternalPackages: ["pg"],
+  serverExternalPackages: ["pg", "@node-rs/argon2"],
   async headers() { return [{ source: "/:path*", headers: securityHeaders }]; },
 };
 export default config;

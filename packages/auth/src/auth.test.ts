@@ -1,13 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { memoryAdapter } from "better-auth/adapters/memory";
-import { createAuth, OutboxMailer, DisabledMailer, EmailNotConfiguredError, getMembershipContext, type AuthDb } from "./index";
+import { createAuth, type CreateAuthOptions, OutboxMailer, DisabledMailer, EmailNotConfiguredError, getMembershipContext, type AuthDb } from "./index";
 import { can } from "@quantara/rbac";
+import { secretFromOtpauthUri, totp } from "./testing";
 
 const PASSWORD = "Correct-Horse-Battery-9";
-function setup(mailer = new OutboxMailer()) {
+function setup(mailer = new OutboxMailer(), extra: Partial<CreateAuthOptions> = {}) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db: Record<string, any[]> = { user: [], session: [], account: [], verification: [], rateLimit: [], organization: [], member: [], invitation: [], twoFactor: [] };
-  const auth = createAuth({ database: memoryAdapter(db), mailer, secret: "test-secret-test-secret-test-secret-123", baseURL: "http://localhost:3000" });
+  const auth = createAuth({ database: memoryAdapter(db), mailer, secret: "test-secret-test-secret-test-secret-123", baseURL: "http://localhost:3000", ...extra });
   return { auth, mailer, db };
 }
 const tokenFrom = (text: string) => new URL(text.match(/https?:\/\/\S+/)![0]).searchParams.get("token") ?? new URL(text.match(/https?:\/\/\S+/)![0]).pathname.split("/").pop()!;
@@ -144,5 +145,103 @@ describe("organization invitations", () => {
     const peer = await verifiedSession(s, "peer@example.com");
     await s.auth.api.acceptInvitation({ body: { invitationId: s.mailer.last("invitation")!.text.match(/accept-invitation\/(\S+)/)![1]! }, headers: peer.headers });
     await expect(s.auth.api.createInvitation({ body: { email: "x@example.com", role: "council_user" as never, organizationId: org.id }, headers: peer.headers })).rejects.toThrow();
+  });
+});
+
+describe("ResendMailer", () => {
+  it("posts the message to the Resend API with the key in the Authorization header", async () => {
+    const { ResendMailer } = await import("./mailer");
+    let seen: { url: string; init: RequestInit } | undefined;
+    const m = new ResendMailer({ apiKey: "re_test", from: "Quantara <no-reply@example.test>", fetchImpl: (async (url: string, init: RequestInit) => { seen = { url, init }; return new Response("{}", { status: 200 }); }) as never });
+    await m.send({ to: "a@b.test", subject: "S", text: "T", kind: "other" });
+    expect(seen?.url).toBe("https://api.resend.com/emails");
+    expect((seen?.init.headers as Record<string, string>).Authorization).toBe("Bearer re_test");
+    expect(JSON.parse(String(seen?.init.body))).toEqual({ from: "Quantara <no-reply@example.test>", to: ["a@b.test"], subject: "S", text: "T" });
+  });
+  it("throws without leaking the response body when the provider rejects", async () => {
+    const { ResendMailer } = await import("./mailer");
+    const m = new ResendMailer({ apiKey: "k", from: "f@x.test", fetchImpl: (async () => new Response("secret@leak.test", { status: 422 })) as never });
+    await expect(m.send({ to: "a@b.test", subject: "S", text: "T", kind: "other" })).rejects.toThrow(/HTTP 422/);
+    await expect(m.send({ to: "a@b.test", subject: "S", text: "T", kind: "other" })).rejects.not.toThrow(/leak/);
+  });
+  it("refuses to be built without credentials", async () => {
+    const { ResendMailer } = await import("./mailer");
+    expect(() => new ResendMailer({ apiKey: "", from: "f@x.test" })).toThrow();
+    expect(() => new ResendMailer({ apiKey: "k", from: "" })).toThrow();
+  });
+});
+
+describe("onUserCreated hook", () => {
+  it("runs after sign-up with the new user", async () => {
+    const created: string[] = [];
+    const s = setup(new OutboxMailer(), { onUserCreated: async (u) => { created.push(u.email); } });
+    await s.auth.api.signUpEmail({ body: { email: "hook@example.test", password: PASSWORD, name: "Hook" } });
+    expect(created).toEqual(["hook@example.test"]);
+  });
+  it("surfaces a failing hook to the caller (the handler must therefore be idempotent)", async () => {
+    const s = setup(new OutboxMailer(), { onUserCreated: async () => { throw new Error("workspace failed"); } });
+    await expect(s.auth.api.signUpEmail({ body: { email: "hook2@example.test", password: PASSWORD, name: "H" } })).rejects.toThrow();
+  });
+});
+
+describe("MFA full cycle (TOTP, backup codes, disable)", () => {
+  async function enrolled() {
+    const s = setup(); const { headers } = await verifiedSession(s, "full@example.com");
+    const r = await s.auth.api.enableTwoFactor({ body: { password: PASSWORD }, headers });
+    if (r.method !== "totp") throw new Error("expected totp");
+    const secret = secretFromOtpauthUri(r.totpURI);
+    // Activating two-factor rotates the session: continue with the fresh cookie, as a browser would.
+    const v = await s.auth.api.verifyTOTP({ body: { code: totp(secret) }, headers, returnHeaders: true });
+    return { s, headers: new Headers({ cookie: v.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ") }), secret, backupCodes: r.backupCodes };
+  }
+  const cookieOf = (h: Headers) => new Headers({ cookie: h.getSetCookie().map((c) => c.split(";")[0]).join("; ") });
+
+  it("a correct authenticator code activates two-factor; a wrong code does not", async () => {
+    const s = setup(); const { headers } = await verifiedSession(s, "act@example.com");
+    const r = await s.auth.api.enableTwoFactor({ body: { password: PASSWORD }, headers });
+    if (r.method !== "totp") throw new Error("expected totp");
+    await expect(s.auth.api.verifyTOTP({ body: { code: "000000" }, headers })).rejects.toThrow();
+    expect((s.db.user![0] as { twoFactorEnabled?: boolean }).twoFactorEnabled).toBeFalsy();
+    await s.auth.api.verifyTOTP({ body: { code: totp(secretFromOtpauthUri(r.totpURI)) }, headers });
+    expect((s.db.user![0] as { twoFactorEnabled?: boolean }).twoFactorEnabled).toBe(true);
+  });
+  it("after activation, password sign-in alone yields no session and demands a code", async () => {
+    const { s } = await enrolled();
+    const r = await s.auth.api.signInEmail({ body: { email: "full@example.com", password: PASSWORD }, returnHeaders: true });
+    expect((r.response as { twoFactorRedirect?: boolean }).twoFactorRedirect).toBe(true);
+    const sessionCookie = r.headers.getSetCookie().find((c) => c.startsWith("better-auth.session_token="));
+    expect(sessionCookie === undefined || /^better-auth\.session_token=;/.test(sessionCookie)).toBe(true); // cleared, not issued
+    expect(s.db.session!.length).toBe(1); // no new session was created
+  });
+  it("activating two-factor replaces the session cookie used to enrol", async () => {
+    const s = setup(); const { headers } = await verifiedSession(s, "rot@example.com");
+    const e = await s.auth.api.enableTwoFactor({ body: { password: PASSWORD }, headers });
+    if (e.method !== "totp") throw new Error("expected totp");
+    await s.auth.api.verifyTOTP({ body: { code: totp(secretFromOtpauthUri(e.totpURI)) }, headers });
+    await expect(s.auth.api.listSessions({ headers })).rejects.toThrow(); // old cookie no longer valid
+  });
+  it("sign-in completes with a valid code, and rejects a wrong one", async () => {
+    const { s, secret } = await enrolled();
+    const r = await s.auth.api.signInEmail({ body: { email: "full@example.com", password: PASSWORD }, returnHeaders: true });
+    const pending = cookieOf(r.headers);
+    await expect(s.auth.api.verifyTOTP({ body: { code: "000000" }, headers: pending })).rejects.toThrow();
+    const ok = await s.auth.api.verifyTOTP({ body: { code: totp(secret) }, headers: pending, returnHeaders: true });
+    expect(ok.response.user.email).toBe("full@example.com");
+    expect(ok.headers.getSetCookie().some((c) => c.startsWith("better-auth.session_token="))).toBe(true);
+  });
+  it("a backup code signs in once and cannot be reused", async () => {
+    const { s, backupCodes } = await enrolled();
+    const first = await s.auth.api.signInEmail({ body: { email: "full@example.com", password: PASSWORD }, returnHeaders: true });
+    const ok = await s.auth.api.verifyBackupCode({ body: { code: backupCodes[0]! }, headers: cookieOf(first.headers) });
+    expect(ok.user.email).toBe("full@example.com");
+    const second = await s.auth.api.signInEmail({ body: { email: "full@example.com", password: PASSWORD }, returnHeaders: true });
+    await expect(s.auth.api.verifyBackupCode({ body: { code: backupCodes[0]! }, headers: cookieOf(second.headers) })).rejects.toThrow();
+  });
+  it("disabling two-factor needs the password, then password sign-in works again", async () => {
+    const { s, headers } = await enrolled();
+    await expect(s.auth.api.disableTwoFactor({ body: { password: "Wrong-Password-123" }, headers })).rejects.toThrow();
+    await s.auth.api.disableTwoFactor({ body: { password: PASSWORD }, headers });
+    const r = await s.auth.api.signInEmail({ body: { email: "full@example.com", password: PASSWORD } });
+    expect(r.user.email).toBe("full@example.com");
   });
 });

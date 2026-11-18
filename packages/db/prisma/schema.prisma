@@ -1198,3 +1198,13 @@ model RateLimitBucket {
 
   @@id([key, windowStart])
 }
+
+/// Better Auth's built-in request rate limiter (storage: "database"). Table/field names are dictated by Better Auth.
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rateLimit")
+}

@@ -30,7 +30,7 @@ for (const m of models) {
     }
   }
   const names = m.fields.map((f) => f.name);
-  if (!names.includes("createdAt") && !["RolePermission","ServiceIndustry","ServiceRelation","InsightTag","MeetingParticipant","ExecutionDocument","RateLimitBucket","Permission","DocumentChunk","ServiceCapability","Tag","Author","InsightCategory","SiteSetting","IntegrationStatus"].includes(m.name)) problems.push(`${m.name}: no createdAt`);
+  if (!names.includes("createdAt") && !["RolePermission","ServiceIndustry","ServiceRelation","InsightTag","MeetingParticipant","ExecutionDocument","RateLimitBucket","RateLimit","Permission","DocumentChunk","ServiceCapability","Tag","Author","InsightCategory","SiteSetting","IntegrationStatus"].includes(m.name)) problems.push(`${m.name}: no createdAt`);
 }
 console.log(problems.length ? "REVIEW FINDINGS:\n- " + problems.join("\n- ") : "no review findings");
 console.log(models.map((m) => m.name).join(", "));

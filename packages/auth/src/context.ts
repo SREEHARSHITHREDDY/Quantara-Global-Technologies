@@ -1,10 +1,11 @@
 import type { MembershipContext } from "@quantara/rbac";
 
 /** Minimal DB surface needed to resolve authorization. Satisfied by the Prisma client (and by fakes in tests). */
+/* eslint-disable @typescript-eslint/no-explicit-any -- `select` is typed loosely so Prisma's generated generic signatures remain assignable */
 export interface AuthDb {
-  member: { findUnique(args: { where: { organizationId_userId: { organizationId: string; userId: string } }; select?: unknown }): Promise<{ role: string } | null> };
-  organization: { findUnique(args: { where: { id: string }; select?: unknown }): Promise<{ type: "STAFF" | "CLIENT"; status: "ACTIVE" | "SUSPENDED" } | null> };
-  user: { findUnique(args: { where: { id: string }; select?: unknown }): Promise<{ banned: boolean | null; banExpires: Date | null } | null> };
+  member: { findUnique(args: { where: { organizationId_userId: { organizationId: string; userId: string } }; select?: any }): Promise<{ role: string } | null> };
+  organization: { findUnique(args: { where: { id: string }; select?: any }): Promise<{ type: "STAFF" | "CLIENT"; status: "ACTIVE" | "SUSPENDED" } | null> };
+  user: { findUnique(args: { where: { id: string }; select?: any }): Promise<{ banned: boolean | null; banExpires: Date | null } | null> };
 }
 
 /**

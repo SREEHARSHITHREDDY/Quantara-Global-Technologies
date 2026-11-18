@@ -17,6 +17,8 @@ export interface CreateAuthOptions {
   trustedOrigins?: string[];
   appName?: string;
   production?: boolean;
+  /** Called right after a user row is created (e.g. to provision that customer's workspace). The row already exists when this runs, so the handler must be idempotent. */
+  onUserCreated?: (user: { id: string; name: string; email: string }) => Promise<void>;
 }
 
 // Better Auth's own organization endpoints (invite/remove/update) are gated by this access-control map.
@@ -55,6 +57,7 @@ export function createAuth(o: CreateAuthOptions) {
     session: { expiresIn: 60 * 60 * 8, updateAge: 60 * 15, freshAge: 60 * 10, cookieCache: { enabled: false } },
     rateLimit: { enabled: true, window: 60, max: 60, storage: "database",
       customRules: { "/sign-in/email": { window: 60, max: 5 }, "/request-password-reset": { window: 300, max: 3 }, "/sign-up/email": { window: 300, max: 5 }, "/two-factor/verify-totp": { window: 60, max: 5 } } },
+    databaseHooks: o.onUserCreated ? { user: { create: { after: async (u: { id: string; name: string; email: string }) => { await o.onUserCreated!(u); } } } } : undefined,
     advanced: { useSecureCookies: !!o.production, defaultCookieAttributes: { sameSite: "lax", httpOnly: true } },
     plugins: [
       // user.role ("user" | "admin") ONLY gates Better Auth's ban/unban/session-revocation endpoints.
