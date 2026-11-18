@@ -1,5 +1,5 @@
 // STATUS: unverified — written but never executed.
-import { describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 import { db, id, makeAgent, makeMember, makeOrg, makeTenantFixture, makeUser, rejects } from "./helpers";
 
 const enquiry = (o: object = {}) => ({ referenceId: id("QNT-ENQ"), fullName: "A", businessEmail: "a@b.test", organization: "O", jobDesignation: "D", country: "IN", projectRequirements: "x", privacyConsent: true, consentAt: new Date(), consentTextVersion: "v1", ...o });
@@ -30,6 +30,7 @@ describe("data-integrity constraints", () => {
 });
 
 describe("market statistic publication gate", () => {
+  afterAll(async () => { await db.marketStatistic.deleteMany({ where: { verifiedBy: "test" } }); });
   const stat = (o: object) => ({ key: id("stat"), statement: "s", theme: "gcc", ...o });
   it("rejects publishing without a source", async () => { await rejects(db.marketStatistic.create({ data: stat({ isPublished: true, verifiedAt: new Date() }) })); });
   it("rejects publishing a sourced but unverified statistic", async () => {
