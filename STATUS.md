@@ -78,9 +78,23 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 ## AI Executive Council — Stage 1 (foundations, mock mode)
 | Item | State |
 |---|---|
+| Stage 1 verified by owner: 22 council unit tests, 72 database tests (seed, agents, plan default) | ✅ verified on owner's machine |
 | `@quantara/council` package: provider port, Mock provider (10 scenarios), 10 agent definitions, assessment schema with evidence claims, labels, 3-level provider resolution, access plans, 8 templates | ✅ 22 unit tests pass in the build sandbox (not yet run by owner) |
-| `CouncilPlan` + Organization fields (`councilPlan` default DISABLED, trial end, concurrency override) | ⚠️ schema validates; **migration not yet generated** (`migrate:dev --name council_access`) |
-| Seed: 10 Agent rows; staff org on ENTERPRISE; clients stay DISABLED | ⚠️ unverified (needs DB run) |
+| `CouncilPlan` + Organization fields; seed of 10 Agent rows; staff org ENTERPRISE, clients DISABLED | ✅ verified (migration `council_access` applied, seed test passes) |
+
+## AI Executive Council — Stage 2 (orchestration core, mock mode)
+| Item | State |
+|---|---|
+| Execution state machine (QUEUED → CLASSIFYING → ASSESSING → REVIEWING → CONSOLIDATING → terminal); stale and illegal transitions rejected | ⚠️ 42 council unit tests pass in the sandbox; not yet run by owner |
+| Orchestrator: parallel assessments, one retry on provider error or invalid JSON, CEO synthesis, disagreement records, budget checks, cancel, deadline, resume without repeating finished agents | ⚠️ same; all 10 mock scenarios covered |
+| Atomic budget reservation (row lock; concurrency limit; monthly tokens and cost) and Postgres execution store | ⚠️ **database tests written, never executed** (`tests/council.int.test.ts`); migration `council_orchestration` must be generated |
+| Participant selection is deterministic (template or explicit list). The CEO does not choose by a model call, and there is no model-driven review round yet | ℹ️ by design for now |
+| Enum note: the design's COMPLETED is the existing SUCCEEDED status | ℹ️ |
+| Worker handler, SSE, screens, reports (20 sections), approvals, real provider adapters, documents, memory | ❌ not built |
+
+## AI Executive Council — Stage 1 details
+| Item | State |
+|---|---|
 | Real Anthropic / OpenAI adapters, orchestrator, worker handler, SSE, screens, reports, approvals, documents, memory | ❌ not built (later stages) |
 | Provider keys | ⏳ awaiting credentials; everything runs as SIMULATED ANALYSIS until then |
 

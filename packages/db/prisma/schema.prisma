@@ -88,6 +88,10 @@ enum MessageRole {
 }
 enum ExecutionStatus {
   QUEUED
+  CLASSIFYING
+  ASSESSING
+  REVIEWING
+  CONSOLIDATING
   RUNNING
   AWAITING_APPROVAL
   SUCCEEDED
@@ -909,6 +913,9 @@ model Execution {
   iteration      Int             @default(0)
   tokenBudget    Int
   tokensUsed     Int             @default(0)
+  /// Budget set aside when the execution was created. Counts against the organization's monthly budget until the execution ends.
+  reservedTokens Int             @default(0)
+  reservedCostUsd Decimal        @default(0) @db.Decimal(12, 6)
   costBudgetUsd  Decimal         @db.Decimal(12, 6)
   costUsd        Decimal         @default(0) @db.Decimal(12, 6)
   deadlineAt     DateTime?
@@ -965,6 +972,7 @@ model AgentTask {
   createdAt   DateTime        @default(now())
   usage       UsageRecord[]
 
+  @@unique([executionId, agentId, kind, round])
   @@index([executionId, round])
   @@index([agentId])
 }
