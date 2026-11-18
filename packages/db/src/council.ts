@@ -19,8 +19,11 @@ export class StaleTransitionError extends Error {
 }
 
 export interface ReserveInput {
-  organizationId: string; userId: string; conversationId: string;
+  organizationId: string; userId: string;
+  /** Omit to create a new conversation in the same transaction. */
+  conversationId?: string; title?: string;
   mode: ConsultationMode; prompt: string;
+  participants?: string[]; providerKey?: string | null; templateId?: string | null;
   estimate: { tokens: number; costUsd: number };
   /** From the organization's plan limits. */
   maxConcurrent: number;
@@ -30,7 +33,7 @@ export type ReserveResult =
   | { ok: true; executionId: string }
   | { ok: false; reason: "concurrency_limit" | "budget_exceeded" };
 
-type ReserveTx = Pick<PrismaClient, "$queryRaw" | "organization" | "execution" | "usageRecord">;
+type ReserveTx = Pick<PrismaClient, "$queryRaw" | "organization" | "execution" | "usageRecord" | "conversation">;
 
 /**
  * Creates a QUEUED execution only if the organization has concurrency and monthly budget left.
@@ -64,9 +67,14 @@ export async function reserveExecution(db: PrismaClient, input: ReserveInput): P
     const pendingCost = active.reduce((s, e) => s + Math.max(num(e.reservedCostUsd) - num(e.costUsd), 0), 0);
     if (usedTokens + pendingTokens + input.estimate.tokens > budget.tokens) return { ok: false, reason: "budget_exceeded" };
     if (usedCost + pendingCost + input.estimate.costUsd > budget.costUsd + 1e-9) return { ok: false, reason: "budget_exceeded" };
+    const conversationId: string = input.conversationId ?? (await tx.conversation.create({
+      data: { organizationId: input.organizationId, userId: input.userId, title: clip(input.title ?? input.prompt, 80), mode: input.mode },
+      select: { id: true },
+    })).id;
     const e = await tx.execution.create({
       data: {
-        organizationId: input.organizationId, userId: input.userId, conversationId: input.conversationId,
+        organizationId: input.organizationId, userId: input.userId, conversationId,
+        participants: input.participants ?? [], providerKey: input.providerKey ?? null, templateId: input.templateId ?? null,
         mode: input.mode, prompt: input.prompt, status: "QUEUED",
         // the database requires a positive cost budget, even when the provider is free
         tokenBudget: input.estimate.tokens, costBudgetUsd: Math.max(input.estimate.costUsd, 0.000001).toFixed(6),
@@ -202,4 +210,88 @@ export function createExecutionStore(db: PrismaClient, organizationId: string): 
       await db.report.upsert({ where: { executionId: id }, create: { organizationId, userId: e.userId, executionId: id, ...data }, update: data });
     },
   };
+}
+
+// ---- reads, cleanup and plan management -------------------------------------------------------
+
+export interface ExecutionView {
+  id: string; organizationId: string; userId: string; status: ExecutionStatus; mode: ConsultationMode;
+  prompt: string; participants: string[]; providerKey: string | null; templateId: string | null;
+  error: string | null; tokensUsed: number; costUsd: number; reportReady: boolean;
+  deadlineAt: Date | null; createdAt: Date; startedAt: Date | null; finishedAt: Date | null;
+}
+/** Returns the execution only if it belongs to the organization. The caller decides whether this user may read it. */
+export async function getExecutionView(db: PrismaClient, executionId: string, organizationId: string): Promise<ExecutionView | null> {
+  const e = await db.execution.findFirst({ where: { id: executionId, organizationId }, include: { report: { select: { status: true } } } });
+  if (!e) return null;
+  return {
+    id: e.id, organizationId: e.organizationId, userId: e.userId, status: e.status, mode: e.mode, prompt: e.prompt,
+    participants: e.participants, providerKey: e.providerKey, templateId: e.templateId, error: e.error,
+    tokensUsed: e.tokensUsed, costUsd: num(e.costUsd), reportReady: e.report?.status === "READY",
+    deadlineAt: e.deadlineAt, createdAt: e.createdAt, startedAt: e.startedAt, finishedAt: e.finishedAt,
+  };
+}
+
+export async function getExecutionResult(db: PrismaClient, executionId: string, organizationId: string): Promise<unknown | null> {
+  const r = await db.report.findFirst({ where: { executionId, organizationId, status: "READY" }, select: { sections: true } });
+  return r?.sections ?? null;
+}
+
+export interface ExecutionEventRow { seq: number; type: string; agent: string | null; payload: unknown; createdAt: Date }
+export async function listExecutionEvents(db: PrismaClient, a: { executionId: string; organizationId: string; afterSeq: number; limit?: number }): Promise<ExecutionEventRow[]> {
+  const owns = await db.execution.count({ where: { id: a.executionId, organizationId: a.organizationId } });
+  if (owns === 0) return [];
+  const rows: { seq: number; type: string; agentKey: string | null; payload: unknown; createdAt: Date }[] = await db.agentEvent.findMany({
+    where: { executionId: a.executionId, seq: { gt: a.afterSeq } }, orderBy: { seq: "asc" }, take: Math.min(a.limit ?? 200, 500),
+  });
+  return rows.map((r) => ({ seq: r.seq, type: r.type, agent: r.agentKey, payload: r.payload, createdAt: r.createdAt }));
+}
+
+/** Ends a stuck execution so its reservation is released. No effect if it already ended. */
+export async function failExecution(db: PrismaClient, a: { executionId: string; organizationId: string; error: string }): Promise<boolean> {
+  const r = await db.execution.updateMany({
+    where: { id: a.executionId, organizationId: a.organizationId, status: { in: NON_TERMINAL } },
+    data: { status: "FAILED", error: a.error, finishedAt: new Date() },
+  });
+  return r.count > 0;
+}
+
+/**
+ * Safety net for executions whose worker died or whose job expired: past their deadline (plus grace) they become TIMED_OUT,
+ * and anything older than `maxAgeMs` that is still unfinished becomes FAILED. Run periodically by the worker.
+ */
+export async function failStaleExecutions(db: PrismaClient, o: { now?: Date; graceMs?: number; maxAgeMs?: number } = {}): Promise<{ timedOut: number; failed: number }> {
+  const now = o.now ?? new Date();
+  const finishedAt = now;
+  const timedOut = await db.execution.updateMany({
+    where: { status: { in: NON_TERMINAL }, deadlineAt: { lt: new Date(now.getTime() - (o.graceMs ?? 5 * 60_000)) } },
+    data: { status: "TIMED_OUT", error: "deadline_exceeded", finishedAt },
+  });
+  const failed = await db.execution.updateMany({
+    where: { status: { in: NON_TERMINAL }, createdAt: { lt: new Date(now.getTime() - (o.maxAgeMs ?? 60 * 60_000)) } },
+    data: { status: "FAILED", error: "abandoned", finishedAt },
+  });
+  return { timedOut: timedOut.count, failed: failed.count };
+}
+
+export interface CouncilOrgAccess { plan: "DISABLED" | "TRIAL" | "STANDARD" | "ENTERPRISE"; trialEndsAt: Date | null; maxConcurrentOverride: number | null }
+export async function getCouncilOrgAccess(db: PrismaClient, organizationId: string): Promise<CouncilOrgAccess | null> {
+  const o = await db.organization.findUnique({ where: { id: organizationId }, select: { councilPlan: true, councilTrialEndsAt: true, councilMaxConcurrent: true } });
+  return o ? { plan: o.councilPlan, trialEndsAt: o.councilTrialEndsAt, maxConcurrentOverride: o.councilMaxConcurrent } : null;
+}
+
+/** Staff action: turns the Council on, off, or into a trial for one organization. Writes an audit entry. */
+export async function setCouncilPlan(db: PrismaClient, a: { organizationId: string; plan: CouncilOrgAccess["plan"]; trialDays?: number; maxConcurrent?: number | null; actorId?: string | null; now?: Date }): Promise<{ trialEndsAt: Date | null }> {
+  const now = a.now ?? new Date();
+  if (a.plan === "TRIAL" && !(a.trialDays && a.trialDays > 0)) throw new Error("a trial needs a number of days");
+  const trialEndsAt = a.plan === "TRIAL" ? new Date(now.getTime() + a.trialDays! * 86_400_000) : null;
+  await db.organization.update({ where: { id: a.organizationId }, data: { councilPlan: a.plan, councilTrialEndsAt: trialEndsAt, ...(a.maxConcurrent !== undefined ? { councilMaxConcurrent: a.maxConcurrent } : {}) } });
+  await db.auditLog.create({ data: { organizationId: a.organizationId, actorId: a.actorId ?? null, actorType: a.actorId ? "user" : "system", action: "council.plan.set", resourceType: "organization", resourceId: a.organizationId, metadata: { plan: a.plan, trialEndsAt: trialEndsAt?.toISOString() ?? null } } });
+  return { trialEndsAt };
+}
+
+/** The customer workspace a user belongs to, looked up by email. For staff tooling. */
+export async function findCustomerOrgByEmail(db: PrismaClient, email: string): Promise<{ organizationId: string; name: string } | null> {
+  const m = await db.member.findFirst({ where: { user: { email: email.toLowerCase() }, organization: { type: "CLIENT" } }, select: { organizationId: true, organization: { select: { name: true } } } });
+  return m ? { organizationId: m.organizationId, name: m.organization.name } : null;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, requestCancel, reserveExecution } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -159,5 +159,75 @@ describe("store safety", () => {
     await expect(s.transition(r.executionId, "QUEUED", "SUCCEEDED")).rejects.toThrow(/invalid execution transition/);
     await s.transition(r.executionId, "QUEUED", "CLASSIFYING");
     await expect(s.transition(r.executionId, "QUEUED", "CLASSIFYING")).rejects.toThrow(/no longer in state/);
+  });
+});
+
+describe("start, read and cleanup helpers", () => {
+  it("reserving without a conversation creates one, and stores participants, provider and template", async () => {
+    const t = await tenant();
+    const r = await reserveExecution(db, { organizationId: t.org.id, userId: t.user.id, mode: "MULTI_EXECUTIVE", prompt: "Plan a market entry", participants: ["CEO", "CFO"], providerKey: "mock", templateId: "market-entry", estimate: { tokens: 1000, costUsd: 0 }, maxConcurrent: 3 });
+    if (!r.ok) throw new Error(r.reason);
+    const v = await getExecutionView(db, r.executionId, t.org.id);
+    expect(v).toMatchObject({ participants: ["CEO", "CFO"], providerKey: "mock", templateId: "market-entry", status: "QUEUED", userId: t.user.id });
+    expect(await db.conversation.count({ where: { organizationId: t.org.id } })).toBe(2); // the helper tenant's plus this one
+  });
+  it("views, results and events are scoped to the organization", async () => {
+    const a = await tenant(); const b = await tenant();
+    const { id } = await runIt(a, "success");
+    expect((await getExecutionView(db, id, a.org.id))?.reportReady).toBe(true);
+    expect(await getExecutionView(db, id, b.org.id)).toBeNull();
+    expect(await getExecutionResult(db, id, a.org.id)).not.toBeNull();
+    expect(await getExecutionResult(db, id, b.org.id)).toBeNull();
+    expect((await listExecutionEvents(db, { executionId: id, organizationId: a.org.id, afterSeq: 0 })).length).toBeGreaterThan(10);
+    expect(await listExecutionEvents(db, { executionId: id, organizationId: b.org.id, afterSeq: 0 })).toEqual([]);
+  });
+  it("events can be read after a sequence number, in order, with a limit", async () => {
+    const t = await tenant(); const { id } = await runIt(t, "success");
+    const all = await listExecutionEvents(db, { executionId: id, organizationId: t.org.id, afterSeq: 0, limit: 500 });
+    const tail = await listExecutionEvents(db, { executionId: id, organizationId: t.org.id, afterSeq: 5, limit: 3 });
+    expect(tail.map((e) => e.seq)).toEqual([6, 7, 8]);
+    expect(all.map((e) => e.seq)).toEqual(all.map((_, i) => i + 1));
+  });
+  it("failExecution ends an unfinished execution and releases its reservation, but never changes a finished one", async () => {
+    const t = await tenant({ tokens: 10_000 });
+    const r = await reserve(t, 9000, 5); if (!r.ok) throw new Error();
+    expect(await reserve(t, 9000, 5)).toEqual({ ok: false, reason: "budget_exceeded" });
+    expect(await failExecution(db, { executionId: r.executionId, organizationId: t.org.id, error: "enqueue_failed" })).toBe(true);
+    expect((await reserve(t, 9000, 5)).ok).toBe(true);
+    const done = await runIt(await tenant(), "success");
+    expect(await failExecution(db, { executionId: done.id, organizationId: (await db.execution.findUniqueOrThrow({ where: { id: done.id } })).organizationId, error: "x" })).toBe(false);
+  });
+  it("stale cleanup times out past-deadline executions and fails abandoned ones, leaving fresh ones alone", async () => {
+    const t = await tenant();
+    const mk = async () => { const r = await reserve(t, 100, 99); if (!r.ok) throw new Error(); return r.executionId; };
+    const fresh = await mk(), late = await mk(), old = await mk();
+    await db.execution.update({ where: { id: late }, data: { status: "ASSESSING", deadlineAt: new Date(Date.now() - 20 * 60_000) } });
+    await db.execution.update({ where: { id: old }, data: { createdAt: new Date(Date.now() - 3 * 3_600_000) } });
+    const r = await failStaleExecutions(db);
+    expect(r.timedOut).toBeGreaterThanOrEqual(1); expect(r.failed).toBeGreaterThanOrEqual(1);
+    const st = async (id: string) => (await db.execution.findUniqueOrThrow({ where: { id } })).status;
+    expect(await st(fresh)).toBe("QUEUED"); expect(await st(late)).toBe("TIMED_OUT"); expect(await st(old)).toBe("FAILED");
+  });
+});
+
+describe("council plan management", () => {
+  it("sets a trial with an end date, audits it, and clients default to disabled", async () => {
+    const t = await tenant();
+    expect((await getCouncilOrgAccess(db, t.org.id))?.plan).toBe("DISABLED");
+    await expect(setCouncilPlan(db, { organizationId: t.org.id, plan: "TRIAL" })).rejects.toThrow(/days/);
+    const now = new Date("2026-11-18T00:00:00Z");
+    const r = await setCouncilPlan(db, { organizationId: t.org.id, plan: "TRIAL", trialDays: 14, now });
+    expect(r.trialEndsAt?.toISOString()).toBe("2026-12-02T00:00:00.000Z");
+    expect(await getCouncilOrgAccess(db, t.org.id)).toMatchObject({ plan: "TRIAL" });
+    const log = await db.auditLog.findFirstOrThrow({ where: { organizationId: t.org.id, action: "council.plan.set" } });
+    expect(log.metadata).toMatchObject({ plan: "TRIAL" });
+    await setCouncilPlan(db, { organizationId: t.org.id, plan: "STANDARD", maxConcurrent: 3 });
+    expect(await getCouncilOrgAccess(db, t.org.id)).toMatchObject({ plan: "STANDARD", trialEndsAt: null, maxConcurrentOverride: 3 });
+  });
+  it("finds a customer workspace by email, not a staff one", async () => {
+    const t = await tenant();
+    const u = await db.user.findUniqueOrThrow({ where: { id: t.user.id } });
+    expect((await findCustomerOrgByEmail(db, u.email.toUpperCase()))?.organizationId).toBe(t.org.id);
+    expect(await findCustomerOrgByEmail(db, "nobody@example.test")).toBeNull();
   });
 });

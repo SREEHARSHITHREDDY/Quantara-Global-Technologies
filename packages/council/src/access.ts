@@ -1,16 +1,19 @@
 export const COUNCIL_PLANS = ["DISABLED", "TRIAL", "STANDARD", "ENTERPRISE"] as const;
 export type CouncilPlan = (typeof COUNCIL_PLANS)[number];
 
+export const CONSULTATION_MODES = ["INDIVIDUAL", "MULTI_EXECUTIVE", "FULL_COUNCIL", "CEO_RECOMMENDATION"] as const;
+export type ConsultationMode = (typeof CONSULTATION_MODES)[number];
+
 export interface CouncilLimits {
   maxConcurrent: number;
   maxDocuments: number;
   maxDocumentBytes: number;
   maxDurationSeconds: number;
   maxReportChars: number;
-  modes: readonly ("INDIVIDUAL" | "MULTI_EXECUTIVE" | "FULL_COUNCIL" | "CEO_RECOMMENDATION")[];
+  modes: readonly ConsultationMode[];
 }
 const MB = 1024 * 1024;
-const ALL = ["INDIVIDUAL", "MULTI_EXECUTIVE", "FULL_COUNCIL", "CEO_RECOMMENDATION"] as const;
+const ALL = CONSULTATION_MODES;
 
 /** Access tiers, not prices. */
 export const PLAN_LIMITS: Record<Exclude<CouncilPlan, "DISABLED">, CouncilLimits> = {

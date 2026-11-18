@@ -92,6 +92,19 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | Enum note: the design's COMPLETED is the existing SUCCEEDED status | ℹ️ |
 | Worker handler, SSE, screens, reports (20 sections), approvals, real provider adapters, documents, memory | ❌ not built |
 
+## AI Executive Council — Stage 3 (worker, API, event stream)
+| Item | State |
+|---|---|
+| Stage 2 verified by owner: 42 council unit tests, 88 database tests including 6-way parallel budget reservation | ✅ verified on owner's machine |
+| `council.execute` worker handler (resume after crash, ends the execution after the last failed attempt, provider unavailable handled) | ⚠️ 6 unit tests pass in sandbox; not yet run by owner |
+| Stale-execution sweeper (past-deadline → TIMED_OUT, abandoned → FAILED) every 5 min in the worker | ⚠️ database test written, unrun |
+| Start / read / cancel service with plan, mode, template, provider, budget, concurrency and per-user rate checks | ⚠️ 26 unit tests pass in sandbox; not yet run by owner |
+| SSE stream with replay by Last-Event-ID, keep-alive, end event, no early end | ⚠️ unit tests pass; **never run against a real browser or database** |
+| API routes `POST /api/council/executions`, `GET .../[id]`, `POST .../[id]/cancel`, `GET .../[id]/events` (origin check, JSON only, size limit, org-scoped) | ⚠️ typecheck only. Not exercised by any test or browser |
+| Web → queue sender (`createSender`) | ⚠️ typecheck only. Needs the worker to have run once so the queues exist |
+| `council:plan` script to enable a workspace (trial or standard) | ⚠️ unrun |
+| Not yet: customer screens, 20-section report, approvals, real provider adapters, documents, SSE re-check of membership during a long stream, SSE per-user connection cap, event retention purge | ❌ |
+
 ## AI Executive Council — Stage 1 details
 | Item | State |
 |---|---|

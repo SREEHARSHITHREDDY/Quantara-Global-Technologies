@@ -53,3 +53,14 @@ export async function enqueue<Q extends QueueName>(boss: PgBoss, queue: Q, paylo
   const singletonKey = def.singletonBy ? String((parsed.data as Record<string, unknown>)[def.singletonBy]) : undefined;
   return boss.send(queue, parsed.data, { ...(singletonKey ? { singletonKey } : {}), ...(opts.startAfterSeconds ? { startAfter: opts.startAfterSeconds } : {}) });
 }
+
+/**
+ * Send-only client for the website. It does no maintenance and no migrations, and needs the worker to have created the queues.
+ * If the worker has never run, `start()` fails and the caller reports the queue as unavailable.
+ */
+export async function createSender(connectionString: string, schema = "pgboss"): Promise<PgBoss> {
+  const boss = new PgBoss({ connectionString, schema, application_name: "quantara-web", supervise: false, schedule: false, migrate: false });
+  boss.on("error", (e) => console.error(JSON.stringify({ level: "error", msg: "pg-boss sender error", error: String(e) })));
+  await boss.start();
+  return boss;
+}

@@ -914,6 +914,10 @@ model Execution {
   tokenBudget    Int
   tokensUsed     Int             @default(0)
   /// Budget set aside when the execution was created. Counts against the organization's monthly budget until the execution ends.
+  /// Executives taking part, the provider chosen at start, and the template used (if any).
+  participants   String[]        @default([])
+  providerKey    String?
+  templateId     String?
   reservedTokens Int             @default(0)
   reservedCostUsd Decimal        @default(0) @db.Decimal(12, 6)
   costBudgetUsd  Decimal         @db.Decimal(12, 6)

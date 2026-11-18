@@ -11,3 +11,4 @@ export * from "./budget";
 export * from "./consolidate";
 export * from "./orchestrator";
 export * from "./memory-store";
+export * from "./selection";

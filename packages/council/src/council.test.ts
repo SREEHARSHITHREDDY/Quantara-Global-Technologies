@@ -151,3 +151,33 @@ describe("templates", () => {
     expect(getTemplate("nope")).toBeUndefined();
   });
 });
+
+import { DEFAULT_CEO_RECOMMENDATION_SET, selectParticipants } from "./index";
+describe("participant selection", () => {
+  it("full council is always all ten", () => {
+    const r = selectParticipants({ mode: "FULL_COUNCIL", participants: ["CFO"] });
+    expect(r.ok && r.participants).toHaveLength(10);
+  });
+  it("individual needs exactly one valid agent", () => {
+    expect(selectParticipants({ mode: "INDIVIDUAL", participants: ["CFO"] })).toEqual({ ok: true, participants: ["CFO"] });
+    expect(selectParticipants({ mode: "INDIVIDUAL", participants: ["CFO", "CTO"] })).toEqual({ ok: false, error: "individual_needs_one_agent" });
+    expect(selectParticipants({ mode: "INDIVIDUAL" })).toEqual({ ok: false, error: "individual_needs_one_agent" });
+    expect(selectParticipants({ mode: "INDIVIDUAL", participants: ["BOSS"] })).toEqual({ ok: false, error: "unknown_agent" });
+  });
+  it("multi-executive uses a template by default and lets an explicit list override it; order is canonical", () => {
+    const t = selectParticipants({ mode: "MULTI_EXECUTIVE", templateId: "financial-risk" });
+    expect(t).toEqual({ ok: true, participants: ["CEO", "CFO", "CLO"], templateId: "financial-risk" });
+    const o = selectParticipants({ mode: "MULTI_EXECUTIVE", templateId: "financial-risk", participants: ["CLO", "CTO"] });
+    expect(o.ok && o.participants).toEqual(["CTO", "CLO"]);
+    expect(selectParticipants({ mode: "MULTI_EXECUTIVE", participants: ["CFO"] })).toEqual({ ok: false, error: "multi_needs_two_agents" });
+    expect(selectParticipants({ mode: "MULTI_EXECUTIVE", templateId: "nope" })).toEqual({ ok: false, error: "unknown_template" });
+  });
+  it("CEO recommendation always includes the CEO and has a default set", () => {
+    const d = selectParticipants({ mode: "CEO_RECOMMENDATION" });
+    expect(d.ok && d.participants).toEqual(DEFAULT_CEO_RECOMMENDATION_SET);
+    const c = selectParticipants({ mode: "CEO_RECOMMENDATION", participants: ["CISO"] });
+    expect(c.ok && c.participants).toEqual(["CEO", "CISO"]);
+    const t = selectParticipants({ mode: "CEO_RECOMMENDATION", templateId: "cybersecurity-assessment" });
+    expect(t.ok && t.participants).toEqual(["CEO", "CTO", "COO", "CISO"]);
+  });
+});

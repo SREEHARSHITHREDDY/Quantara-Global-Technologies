@@ -3,7 +3,7 @@ import { describe, it, expect } from "vitest";
 import { ROLE_KEYS, ROLES } from "@quantara/rbac";
 import { services, industries, marketStatistics } from "@quantara/content";
 import { AGENT_CODES } from "@quantara/council";
-import { db } from "./helpers";
+import { db, makeOrg } from "./helpers";
 import { STAFF_ORG } from "../src/seed/seed";
 
 describe("seed", () => {
@@ -37,7 +37,8 @@ describe("seed", () => {
     expect(agents.map((a) => a.key)).toEqual(["CEO", "CFO", "CTO", "COO", "CMO", "CRO", "CHRO", "CLO", "CISO", "CSO"]);
     expect(agents.filter((a) => a.isSupervisor).map((a) => a.key)).toEqual(["CEO"]);
     expect((await db.organization.findUnique({ where: { id: STAFF_ORG.id } }))?.councilPlan).toBe("ENTERPRISE");
-    expect(await db.organization.count({ where: { type: "CLIENT", councilPlan: { not: "DISABLED" } } })).toBe(0);
+    // other tests turn the Council on for their own throwaway workspaces, so check the default on a fresh one
+    expect((await db.organization.findUniqueOrThrow({ where: { id: (await makeOrg()).id } })).councilPlan).toBe("DISABLED");
   });
   it("is idempotent", async () => {
     const { seedAll } = await import("../src/seed/seed");
