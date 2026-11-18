@@ -9,13 +9,13 @@ export interface StaffSession { userId: string; name: string; email: string; org
 
 /**
  * Server-side gate for every admin page and action. Authorization is resolved from the database:
- *  - no session            -> /sign-in
+ *  - no session            -> /staff
  *  - not a staff member    -> 404 (the admin area is not advertised to customers)
  *  - staff without the permission -> 404 as well, so the existence of pages is not leaked
  */
 export async function requireStaff(permission?: Permission): Promise<StaffSession> {
   const session = await getAuth().api.getSession({ headers: await headers() });
-  if (!session) redirect("/sign-in");
+  if (!session) redirect("/staff");
   const db = getPrisma();
   const staff = await getStaffMembership(db, session.user.id);
   if (!staff) notFound();

@@ -10,23 +10,23 @@ export function Header() {
   const council = isLive(COUNCIL_HREF);
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-navy-950/90 text-white backdrop-blur">
-      <Container className="flex h-16 items-center justify-between gap-6">
-        <Link href="/" className="font-display text-lg font-semibold tracking-tight">{company.name}</Link>
-        <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+      <Container className="flex h-16 items-center justify-between gap-4">
+        <Link href="/" className="shrink-0 whitespace-nowrap font-display text-lg font-semibold tracking-tight">{company.name}</Link>
+        <nav aria-label="Main" className="hidden items-center gap-0.5 xl:flex">
           {items.map((i) => (
-            <Link key={i.href} href={i.href} className="rounded-md px-3 py-2 text-sm font-medium text-mist-200 transition-colors hover:bg-white/10 hover:text-white">{i.label}</Link>
+            <Link key={i.href} href={i.href} className="whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium text-mist-200 transition-colors hover:bg-white/10 hover:text-white">{i.label}</Link>
           ))}
         </nav>
         <div className="flex items-center gap-3">
-          <AuthNav className="hidden rounded-md px-3 py-2 text-sm font-medium text-mist-200 transition-colors hover:bg-white/10 hover:text-white sm:inline-block" />
-          {council && <ButtonLink href={COUNCIL_HREF} size="sm" className="hidden sm:inline-flex">Executive AI Council</ButtonLink>}
-          <details className="relative lg:hidden">
+          <AuthNav className="hidden whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium text-mist-200 transition-colors hover:bg-white/10 hover:text-white sm:inline-block" />
+          {council && <ButtonLink href={COUNCIL_HREF} size="sm" className="hidden whitespace-nowrap sm:inline-flex">Executive AI Council</ButtonLink>}
+          <details className="relative xl:hidden">
             <summary className="flex h-10 cursor-pointer list-none items-center rounded-md border border-white/20 px-3 text-sm font-medium">Menu</summary>
             <nav aria-label="Mobile" className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-navy-900 p-2 shadow-xl">
               {items.map((i) => (
                 <Link key={i.href} href={i.href} className="block rounded-md px-3 py-2.5 text-sm text-mist-100 hover:bg-white/10">{i.label}</Link>
               ))}
-              <AuthNav className="block rounded-md px-3 py-2.5 text-sm text-mist-100 hover:bg-white/10" />
+              <AuthNav className="block w-full rounded-md px-3 py-2.5 text-left text-sm text-mist-100 hover:bg-white/10" />
               {council && <Link href={COUNCIL_HREF} className="mt-1 block rounded-md bg-electric-600 px-3 py-2.5 text-sm font-medium">Executive AI Council</Link>}
             </nav>
           </details>

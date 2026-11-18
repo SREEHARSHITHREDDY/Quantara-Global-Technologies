@@ -115,6 +115,12 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | Result view renders the stored consolidation (label banner, disagreements, assessments, risks, missing info, approvals, claim labels, caveats) | ⚠️ typecheck only |
 | Not yet: approvals actions, export, report access auditing | ❌ |
 
+## Header and staff access
+| Item | State |
+|---|---|
+| Header: no wrapping (nowrap items, desktop menu from the xl breakpoint), no duplicate Council link, Sign out added, Admin link removed from the public site | ⚠️ typecheck only; **not viewed in a browser** |
+| Staff entrance `/staff` (own sign-in page, not linked or indexed; signed-out admin visitors are sent here; non-staff get 404 from `/admin`) | ⚠️ unit test updated; not viewed in a browser |
+
 ## AI Executive Council — Stage 1 details
 | Item | State |
 |---|---|

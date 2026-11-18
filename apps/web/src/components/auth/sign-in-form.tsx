@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { AuthShell, FormError, FormNotice, TextField } from "./auth-ui";
 
-export function SignInForm({ notice }: { notice?: string }) {
+export function SignInForm({ notice, variant = "customer" }: { notice?: string; variant?: "customer" | "staff" }) {
+  const staff = variant === "staff";
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [needsVerification, setNeedsVerification] = useState<string | null>(null);
@@ -25,12 +26,12 @@ export function SignInForm({ notice }: { notice?: string }) {
       return setError(err.status === 429 ? "Too many attempts. Please wait a minute and try again." : "Invalid email or password.");
     }
     if (data && "twoFactorRedirect" in data && data.twoFactorRedirect) return; // the client plugin redirects to /two-factor
-    router.push("/account"); router.refresh();
+    router.push(staff ? "/admin" : "/account"); router.refresh();
   }
 
   return (
-    <AuthShell title="Sign in" subtitle="Access your Quantara workspace."
-      footer={<>New to Quantara? <Link className="font-medium text-electric-600 hover:underline" href="/sign-up">Create an account</Link></>}>
+    <AuthShell title={staff ? "Staff access" : "Sign in"} subtitle={staff ? "For authorised Quantara personnel only. Customer accounts cannot use this page." : "Access your Quantara workspace."}
+      footer={staff ? undefined : <>New to Quantara? <Link className="font-medium text-electric-600 hover:underline" href="/sign-up">Create an account</Link></>}>
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
         {notice && <FormNotice>{notice}</FormNotice>}
         <FormError message={error} />

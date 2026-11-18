@@ -19,9 +19,9 @@ const ctx = (role: string, extra = {}) => ({ role, orgType: "STAFF", orgStatus: 
 beforeEach(() => { h.session = session; h.staff = staff; h.ctx = ctx("bd_manager"); });
 
 describe("requireStaff", () => {
-  it("sends signed-out visitors to sign-in", async () => {
+  it("sends signed-out visitors to the staff entrance", async () => {
     h.session = null;
-    await expect(requireStaff()).rejects.toThrow("REDIRECT:/sign-in");
+    await expect(requireStaff()).rejects.toThrow("REDIRECT:/staff");
   });
   it("returns 404 for signed-in customers who are not staff", async () => {
     h.staff = null;
