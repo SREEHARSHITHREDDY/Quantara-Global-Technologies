@@ -11,7 +11,8 @@ import { db, id } from "./helpers";
 
 const PASSWORD = "Correct-Horse-Battery-9";
 const cookies = (h: Headers) => new Headers({ cookie: h.getSetCookie().map((c) => c.split(";")[0]).join("; ") });
-const tokenFrom = (text: string) => new URL(text.match(/https?:\/\/\S+/)![0]).searchParams.get("token")!;
+// Verification links carry ?token=; reset links carry the token as the last path segment.
+const tokenFrom = (text: string) => { const u = new URL(text.match(/https?:\/\/\S+/)![0]); return u.searchParams.get("token") ?? u.pathname.split("/").pop()!; };
 
 function app() {
   const mailer = new OutboxMailer();
@@ -71,7 +72,7 @@ describe("password reset (Prisma adapter)", () => {
   it("emails a link, changes the password, revokes existing sessions, and the link works once", async () => {
     const a = app(); const email = await signedUp(a); const { user } = await verifiedSignIn(a, email);
     await a.auth.api.requestPasswordReset({ body: { email, redirectTo: "/reset-password" } });
-    const token = tokenFrom(a.mailer.last("reset-password")!.text.replace("/reset-password/", "/x?token="));
+    const token = tokenFrom(a.mailer.last("reset-password")!.text);
     const NEW = "Another-Strong-Pass-77";
     await a.auth.api.resetPassword({ body: { newPassword: NEW, token } });
     expect(await db.session.count({ where: { userId: user.id } })).toBe(0);

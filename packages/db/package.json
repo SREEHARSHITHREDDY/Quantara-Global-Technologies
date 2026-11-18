@@ -13,6 +13,7 @@
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed/run.ts",
+    "staff:grant": "tsx scripts/grant-staff.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "migrate:setup": "node scripts/db-setup.mjs",
