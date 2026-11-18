@@ -13,6 +13,13 @@ datasource db {
 
 // ───────────────────────── Enums ─────────────────────────
 
+enum CouncilPlan {
+  DISABLED
+  TRIAL
+  STANDARD
+  ENTERPRISE
+}
+
 enum OrganizationType {
   STAFF
   CLIENT
@@ -289,6 +296,10 @@ model Organization {
   status               OrganizationStatus @default(ACTIVE)
   monthlyTokenBudget   Int?
   monthlyCostBudgetUsd Decimal?           @db.Decimal(12, 4)
+  /// AI Executive Council access tier. Off until staff enable it.
+  councilPlan          CouncilPlan        @default(DISABLED)
+  councilTrialEndsAt   DateTime?
+  councilMaxConcurrent Int?
 
   members     Member[]
   invitations Invitation[]

@@ -1,5 +1,6 @@
 // STATUS: unverified (needs generated Prisma client + migrated database).
 import { approachSteps, company, coreValues, industries, marketStatistics, requiredSiteSettings, services, sources, whyQuantara } from "@quantara/content";
+import { AGENTS } from "@quantara/council";
 import type { PrismaClient } from "../generated/client";
 import { provisionOrganizationRoles } from "../provision";
 
@@ -19,10 +20,14 @@ export async function seedAll(db: PrismaClient, opts: SeedOptions = {}) {
 
   // 1. Staff organization + roles/permissions
   await db.organization.upsert({
-    where: { id: STAFF_ORG.id }, update: { type: "STAFF" },
-    create: { ...STAFF_ORG, type: "STAFF", status: "ACTIVE", createdAt: new Date() },
+    where: { id: STAFF_ORG.id }, update: { type: "STAFF", councilPlan: "ENTERPRISE" },
+    create: { ...STAFF_ORG, type: "STAFF", status: "ACTIVE", councilPlan: "ENTERPRISE", createdAt: new Date() },
   });
   await provisionOrganizationRoles(db, STAFF_ORG.id);
+  for (const [i, a] of AGENTS.entries()) {
+    const data = { name: a.name, designation: a.title, department: a.title, responsibilities: [a.mandate], capabilities: a.focus, description: a.mandate, isSupervisor: a.code === "CEO", sortOrder: i };
+    await db.agent.upsert({ where: { key: a.code }, update: data, create: { key: a.code, ...data } });
+  }
   log("organization + roles");
 
   // 2. Services, capabilities, industries (published: content comes from the corporate profile)

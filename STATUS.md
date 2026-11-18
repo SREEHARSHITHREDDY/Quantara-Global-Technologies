@@ -75,6 +75,15 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 * **Schema change:** added the `RateLimit` model (Better Auth's database rate limiter; it would have failed at runtime without it). Needs a new migration, generated on your machine (see below). Found by comparing the schema with Better Auth's own generated schema: all other Better Auth tables matched.
 * Design notes: password minimum is 12 characters, sessions last 8 hours, reset links last 1 hour, verification links 24 hours. A user invited to an existing workspace would currently also receive their own workspace (invitation acceptance screens are not built yet). No CAPTCHA yet. `getMembershipContext` typing against Prisma is checked by `pnpm typecheck:db`.
 
+## AI Executive Council — Stage 1 (foundations, mock mode)
+| Item | State |
+|---|---|
+| `@quantara/council` package: provider port, Mock provider (10 scenarios), 10 agent definitions, assessment schema with evidence claims, labels, 3-level provider resolution, access plans, 8 templates | ✅ 22 unit tests pass in the build sandbox (not yet run by owner) |
+| `CouncilPlan` + Organization fields (`councilPlan` default DISABLED, trial end, concurrency override) | ⚠️ schema validates; **migration not yet generated** (`migrate:dev --name council_access`) |
+| Seed: 10 Agent rows; staff org on ENTERPRISE; clients stay DISABLED | ⚠️ unverified (needs DB run) |
+| Real Anthropic / OpenAI adapters, orchestrator, worker handler, SSE, screens, reports, approvals, documents, memory | ❌ not built (later stages) |
+| Provider keys | ⏳ awaiting credentials; everything runs as SIMULATED ANALYSIS until then |
+
 ## Not built ❌
 Remaining public routes: /insights(+slug), /careers(+job) · careers application and newsletter forms · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
 
