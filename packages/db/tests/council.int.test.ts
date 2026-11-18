@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -229,5 +229,32 @@ describe("council plan management", () => {
     const u = await db.user.findUniqueOrThrow({ where: { id: t.user.id } });
     expect((await findCustomerOrgByEmail(db, u.email.toUpperCase()))?.organizationId).toBe(t.org.id);
     expect(await findCustomerOrgByEmail(db, "nobody@example.test")).toBeNull();
+  });
+});
+
+describe("listExecutionsForUser", () => {
+  it("shows a member only their own consultations, newest first, and never another organization's", async () => {
+    const t = await tenant();
+    const other = await makeUser(); await makeMember(t.org.id, other.id);
+    const mine1 = await reserve(t); const mine2 = await reserve(t);
+    const oc = await db.conversation.create({ data: { organizationId: t.org.id, userId: other.id, title: "o", mode: "FULL_COUNCIL" } });
+    await db.execution.create({ data: { organizationId: t.org.id, userId: other.id, conversationId: oc.id, mode: "FULL_COUNCIL", prompt: "theirs", status: "QUEUED", tokenBudget: 10, costBudgetUsd: "0.01", deadlineAt: new Date(Date.now() + 60_000) } });
+    const outsider = await tenant(); await reserve(outsider);
+    const list = await listExecutionsForUser(db, { organizationId: t.org.id, userId: t.user.id, orgWide: false });
+    expect(list).toHaveLength(2);
+    expect(list.every((x) => x.userId === t.user.id)).toBe(true);
+    expect(list[0]!.id).toBe(mine2.ok ? mine2.executionId : "");
+    expect(list[1]!.id).toBe(mine1.ok ? mine1.executionId : "");
+  });
+  it("org-wide listing includes colleagues but stays inside the organization, and the limit is capped", async () => {
+    const t = await tenant();
+    const other = await makeUser(); await makeMember(t.org.id, other.id);
+    await reserve(t);
+    const oc = await db.conversation.create({ data: { organizationId: t.org.id, userId: other.id, title: "o", mode: "FULL_COUNCIL" } });
+    await db.execution.create({ data: { organizationId: t.org.id, userId: other.id, conversationId: oc.id, mode: "FULL_COUNCIL", prompt: "x".repeat(400), status: "QUEUED", tokenBudget: 10, costBudgetUsd: "0.01", deadlineAt: new Date(Date.now() + 60_000) } });
+    const all = await listExecutionsForUser(db, { organizationId: t.org.id, userId: t.user.id, orgWide: true });
+    expect(all).toHaveLength(2);
+    expect(all.find((x) => x.userId === other.id)!.prompt.length).toBeLessThanOrEqual(161);
+    expect(await listExecutionsForUser(db, { organizationId: t.org.id, userId: t.user.id, orgWide: true, limit: 1 })).toHaveLength(1);
   });
 });

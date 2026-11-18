@@ -19,6 +19,7 @@ export function AuthNav({ className }: { className?: string }) {
   return (
     <>
       {isStaff && <Link href="/admin" className={className}>Admin</Link>}
+      <Link href="/council" className={className}>Council</Link>
       <Link href="/account" className={className}>Account</Link>
     </>
   );

@@ -40,3 +40,6 @@ export function councilStartDeps(): StartDeps {
   };
 }
 export const siteOrigin = () => process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+
+/** Provider ids the start form may offer. The service re-validates whatever is submitted. */
+export async function councilProviderChoices(): Promise<string[]> { return platformProviders(); }

@@ -295,3 +295,15 @@ export async function findCustomerOrgByEmail(db: PrismaClient, email: string): P
   const m = await db.member.findFirst({ where: { user: { email: email.toLowerCase() }, organization: { type: "CLIENT" } }, select: { organizationId: true, organization: { select: { name: true } } } });
   return m ? { organizationId: m.organizationId, name: m.organization.name } : null;
 }
+
+export interface ExecutionListItem { id: string; userId: string; status: string; mode: string; prompt: string; templateId: string | null; createdAt: Date; finishedAt: Date | null }
+
+/** Newest first. Scoped to one organization, and to one user unless `orgWide` (callers decide that from permissions). */
+export async function listExecutionsForUser(db: PrismaClient, a: { organizationId: string; userId: string; orgWide: boolean; limit?: number }): Promise<ExecutionListItem[]> {
+  const rows: ExecutionListItem[] = await db.execution.findMany({
+    where: { organizationId: a.organizationId, ...(a.orgWide ? {} : { userId: a.userId }) },
+    orderBy: { createdAt: "desc" }, take: Math.min(Math.max(a.limit ?? 20, 1), 50),
+    select: { id: true, userId: true, status: true, mode: true, prompt: true, templateId: true, createdAt: true, finishedAt: true },
+  });
+  return rows.map((r) => ({ ...r, prompt: clip(r.prompt, 160) }));
+}

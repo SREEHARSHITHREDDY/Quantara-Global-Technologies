@@ -103,7 +103,17 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | API routes `POST /api/council/executions`, `GET .../[id]`, `POST .../[id]/cancel`, `GET .../[id]/events` (origin check, JSON only, size limit, org-scoped) | ⚠️ typecheck only. Not exercised by any test or browser |
 | Web → queue sender (`createSender`) | ⚠️ typecheck only. Needs the worker to have run once so the queues exist |
 | `council:plan` script to enable a workspace (trial or standard) | ⚠️ unrun |
-| Not yet: customer screens, 20-section report, approvals, real provider adapters, documents, SSE re-check of membership during a long stream, SSE per-user connection cap, event retention purge | ❌ |
+| Not yet: 20-section report, approvals, real provider adapters, documents, SSE re-check of membership during a long stream, SSE per-user connection cap, event retention purge | ❌ |
+
+## AI Executive Council — Stage 4 (customer pages)
+| Item | State |
+|---|---|
+| Stage 3 verified by owner: 46 council, 86 web, 16 worker tests, 95 database tests | ✅ verified on owner's machine |
+| Progress reducer `lib/council-progress.ts` (replay-safe, tolerant of malformed events) | ⚠️ 4 unit tests pass in sandbox; not yet run by owner |
+| `listExecutionsForUser` (own history, or org-wide with `council:history:read:org`) | ⚠️ 2 database tests written, unrun |
+| `/council` (gates: signed out, no access, trial expired; start form; history), `/council/[id]` (live progress, result view, cancelled/failed states), nav link | ⚠️ typecheck only. **Never viewed in a browser**; live progress has not been run against a real worker |
+| Result view renders the stored consolidation (label banner, disagreements, assessments, risks, missing info, approvals, claim labels, caveats) | ⚠️ typecheck only |
+| Not yet: approvals actions, export, report access auditing | ❌ |
 
 ## AI Executive Council — Stage 1 details
 | Item | State |
