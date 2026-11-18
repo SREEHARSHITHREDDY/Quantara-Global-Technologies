@@ -1,0 +1,14 @@
+{
+  "name": "@quantara/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": { "pg-boss": "^12.38.2", "zod": "^4.6.7" },
+  "devDependencies": { "tsx": "^4.20.0", "typescript": "^5.9.0", "vitest": "^5.1.1", "@types/node": "^22.0.0", "pg": "^8.23.1", "@types/pg": "^8.15.0" }
+}

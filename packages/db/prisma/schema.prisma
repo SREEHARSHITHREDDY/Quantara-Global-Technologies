@@ -13,26 +13,126 @@ datasource db {
 
 // ───────────────────────── Enums ─────────────────────────
 
-enum OrganizationType { STAFF CLIENT }
-enum OrganizationStatus { ACTIVE SUSPENDED }
-enum RoleScope { ORGANIZATION }
-enum PublicationStatus { DRAFT IN_REVIEW PUBLISHED ARCHIVED }
-enum LeadStatus { NEW CONTACTED QUALIFIED PROPOSAL CONVERTED CLOSED REJECTED }
-enum EnquiryStatus { RECEIVED ACKNOWLEDGED ARCHIVED SPAM }
-enum SubscriberStatus { PENDING CONFIRMED UNSUBSCRIBED BOUNCED }
-enum EmploymentType { FULL_TIME PART_TIME CONTRACT INTERNSHIP }
-enum ApplicationStatus { RECEIVED UNDER_REVIEW SHORTLISTED INTERVIEW OFFER HIRED REJECTED WITHDRAWN }
-enum ConsultationMode { INDIVIDUAL MULTI_EXECUTIVE FULL_COUNCIL CEO_RECOMMENDATION }
-enum ConversationStatus { ACTIVE ARCHIVED }
-enum MessageRole { USER AGENT SYSTEM }
-enum ExecutionStatus { QUEUED RUNNING AWAITING_APPROVAL SUCCEEDED PARTIALLY_SUCCEEDED FAILED CANCELLED TIMED_OUT }
-enum AgentTaskKind { CLASSIFY ASSESS REVIEW REVISE CONSOLIDATE }
-enum AgentTaskStatus { PENDING RUNNING SUCCEEDED FAILED SKIPPED TIMED_OUT }
-enum AgentMessageType { FINDING CHALLENGE CLARIFICATION_REQUEST CLARIFICATION_RESPONSE REVISION }
-enum ConflictSeverity { LOW MEDIUM HIGH }
-enum ConflictStatus { OPEN RESOLVED ACKNOWLEDGED }
-enum ReportStatus { GENERATING READY FAILED }
-enum ApprovalStatus { PENDING APPROVED REJECTED EXPIRED CANCELLED }
+enum OrganizationType {
+  STAFF
+  CLIENT
+}
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+enum PublicationStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  PROPOSAL
+  CONVERTED
+  CLOSED
+  REJECTED
+}
+enum EnquiryStatus {
+  RECEIVED
+  ACKNOWLEDGED
+  ARCHIVED
+  SPAM
+}
+enum SubscriberStatus {
+  PENDING
+  CONFIRMED
+  UNSUBSCRIBED
+  BOUNCED
+}
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+}
+enum ApplicationStatus {
+  RECEIVED
+  UNDER_REVIEW
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+enum ConsultationMode {
+  INDIVIDUAL
+  MULTI_EXECUTIVE
+  FULL_COUNCIL
+  CEO_RECOMMENDATION
+}
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+enum MessageRole {
+  USER
+  AGENT
+  SYSTEM
+}
+enum ExecutionStatus {
+  QUEUED
+  RUNNING
+  AWAITING_APPROVAL
+  SUCCEEDED
+  PARTIALLY_SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMED_OUT
+}
+enum AgentTaskKind {
+  CLASSIFY
+  ASSESS
+  REVIEW
+  REVISE
+  CONSOLIDATE
+}
+enum AgentTaskStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED
+  TIMED_OUT
+}
+enum AgentMessageType {
+  FINDING
+  CHALLENGE
+  CLARIFICATION_REQUEST
+  CLARIFICATION_RESPONSE
+  REVISION
+}
+enum ConflictSeverity {
+  LOW
+  MEDIUM
+  HIGH
+}
+enum ConflictStatus {
+  OPEN
+  RESOLVED
+  ACKNOWLEDGED
+}
+enum ReportStatus {
+  GENERATING
+  READY
+  FAILED
+}
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
 enum ApprovalCategory {
   FINANCIAL_TRANSFER
   PAYMENT
@@ -43,13 +143,49 @@ enum ApprovalCategory {
   RESTRICTED_RECORD_ACCESS
   EXTERNAL_ACTION
 }
-enum DocumentStatus { UPLOADED SCANNING PROCESSING READY REJECTED FAILED DELETED }
-enum ScanStatus { NOT_SCANNED CLEAN INFECTED SCAN_UNAVAILABLE }
-enum DocumentVisibility { PRIVATE ORGANIZATION }
-enum AIProviderKind { ANTHROPIC OPENAI }
-enum HealthStatus { UNKNOWN HEALTHY DEGRADED DOWN }
-enum SourceKind { ANALYST_REPORT PRESS_RELEASE GOVERNMENT INDUSTRY_BODY NEWS OTHER }
-enum FactClass { VERIFIED_FACT USER_PROVIDED EXTERNAL_RESEARCH ASSUMPTION }
+enum DocumentStatus {
+  UPLOADED
+  SCANNING
+  PROCESSING
+  READY
+  REJECTED
+  FAILED
+  DELETED
+}
+enum ScanStatus {
+  NOT_SCANNED
+  CLEAN
+  INFECTED
+  SCAN_UNAVAILABLE
+}
+enum DocumentVisibility {
+  PRIVATE
+  ORGANIZATION
+}
+enum AIProviderKind {
+  ANTHROPIC
+  OPENAI
+}
+enum HealthStatus {
+  UNKNOWN
+  HEALTHY
+  DEGRADED
+  DOWN
+}
+enum SourceKind {
+  ANALYST_REPORT
+  PRESS_RELEASE
+  GOVERNMENT
+  INDUSTRY_BODY
+  NEWS
+  OTHER
+}
+enum FactClass {
+  VERIFIED_FACT
+  USER_PROVIDED
+  EXTERNAL_RESEARCH
+  ASSUMPTION
+}
 
 // ───────────────── Identity (Better Auth) ─────────────────
 
@@ -83,7 +219,7 @@ model User {
   documents      Document[]
   assignedLeads  Lead[]            @relation("LeadAssignee")
   leadNotes      LeadNote[]
-  insightsAuthored Author[]
+  authorProfiles   Author[]
   decidedApprovals ApprovalRequest[] @relation("ApprovalDecider")
   requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
 
@@ -200,6 +336,7 @@ model Invitation {
 
   @@index([organizationId])
   @@index([email])
+  @@index([inviterId])
   @@map("invitation")
 }
 
@@ -220,22 +357,22 @@ model TwoFactor {
 
 // ───────────────────── RBAC ─────────────────────
 
-/// Roles are organization-scoped. organizationId = null means a system role
-/// template available to every organization.
+/// Roles are organization-scoped: every organization owns its role rows, provisioned
+/// from the code-defined permission matrix (@quantara/auth) when the org is created.
 model Role {
   id             String       @id @default(uuid(7))
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   key            String
   name           String
   description    String?
+  /// System roles are provisioned from code and cannot be deleted in the UI.
   system         Boolean      @default(false)
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   permissions    RolePermission[]
 
   @@unique([organizationId, key])
-  @@index([key])
 }
 
 model Permission {
@@ -367,6 +504,7 @@ model ServiceRelation {
   to     Service @relation("ServiceRelationTo", fields: [toId], references: [id], onDelete: Cascade)
 
   @@id([fromId, toId])
+  @@index([toId])
 }
 
 /// Every external market statistic MUST reference a Source with a publication
@@ -404,6 +542,7 @@ model MarketStatistic {
   updatedAt   DateTime @updatedAt
 
   @@index([theme])
+  @@index([sourceId])
 }
 
 model Author {
@@ -415,6 +554,8 @@ model Author {
   userId   String?
   user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   insights Insight[]
+
+  @@index([userId])
 }
 
 model InsightCategory {
@@ -454,6 +595,7 @@ model Insight {
 
   @@index([status, publishedAt])
   @@index([categoryId])
+  @@index([authorId])
 }
 
 model InsightTag {
@@ -500,6 +642,8 @@ model ContactEnquiry {
 
   @@index([businessEmail])
   @@index([createdAt])
+  @@index([serviceId])
+  @@index([industryId])
 }
 
 model Lead {
@@ -530,6 +674,7 @@ model LeadNote {
   createdAt DateTime @default(now())
 
   @@index([leadId, createdAt])
+  @@index([authorId])
 }
 
 model LeadActivity {
@@ -681,7 +826,10 @@ model Conversation {
   executions     Execution[]
   meeting        Meeting?
 
+  @@unique([id, organizationId])
+  @@unique([id, organizationId, userId])
   @@index([organizationId, userId, updatedAt])
+  @@index([userId])
 }
 
 model Message {
@@ -698,6 +846,8 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+  @@index([agentId])
+  @@index([executionId])
 }
 
 model Meeting {
@@ -705,7 +855,8 @@ model Meeting {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversationId String       @unique
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// Composite FK: a meeting can only attach to a conversation of the SAME organization.
+  conversation   Conversation @relation(fields: [conversationId, organizationId], references: [id, organizationId], onDelete: Cascade)
   subject        String
   mode           ConsultationMode
   startedAt      DateTime     @default(now())
@@ -713,6 +864,8 @@ model Meeting {
   participants   MeetingParticipant[]
   executions     Execution[]
 
+  @@unique([id, organizationId])
+  @@unique([conversationId, organizationId])
   @@index([organizationId, startedAt])
 }
 
@@ -723,6 +876,7 @@ model MeetingParticipant {
   agent     Agent   @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
   @@id([meetingId, agentId])
+  @@index([agentId])
 }
 
 model Execution {
@@ -732,7 +886,8 @@ model Execution {
   userId         String
   user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   conversationId String
-  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// Composite FK: execution org + user must equal the conversation's org + owner.
+  conversation   Conversation    @relation(fields: [conversationId, organizationId, userId], references: [id, organizationId, userId], onDelete: Cascade)
   meetingId      String?
   meeting        Meeting?        @relation(fields: [meetingId], references: [id], onDelete: SetNull)
   mode           ConsultationMode
@@ -763,8 +918,13 @@ model Execution {
   usage      UsageRecord[]
   documents  ExecutionDocument[]
 
+  @@unique([id, organizationId])
+  @@unique([id, organizationId, userId])
   @@index([organizationId, userId, createdAt])
   @@index([status])
+  @@index([userId])
+  @@index([conversationId])
+  @@index([meetingId])
 }
 
 model AgentTask {
@@ -813,6 +973,8 @@ model AgentMessage {
   createdAt   DateTime         @default(now())
 
   @@index([executionId, round])
+  @@index([fromAgentId])
+  @@index([toAgentId])
 }
 
 model Conflict {
@@ -851,7 +1013,8 @@ model Report {
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   executionId    String       @unique
-  execution      Execution    @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  /// Composite FK: report org + user must equal the execution's.
+  execution      Execution    @relation(fields: [executionId, organizationId, userId], references: [id, organizationId, userId], onDelete: Cascade)
   title          String
   status         ReportStatus @default(GENERATING)
   /// 20-section structure; each claim carries a FactClass label.
@@ -861,7 +1024,9 @@ model Report {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
+  @@unique([executionId, organizationId, userId])
   @@index([organizationId, userId, createdAt])
+  @@index([userId])
 }
 
 model ApprovalRequest {
@@ -886,6 +1051,9 @@ model ApprovalRequest {
   createdAt      DateTime         @default(now())
 
   @@index([organizationId, status])
+  @@index([executionId])
+  @@index([requesterId])
+  @@index([decidedById])
 }
 
 model Document {
@@ -910,14 +1078,17 @@ model Document {
   chunks         DocumentChunk[]
   executions     ExecutionDocument[]
 
+  @@unique([id, organizationId, ownerId])
   @@index([organizationId, ownerId])
   @@index([status])
+  @@index([ownerId])
 }
 
 model DocumentChunk {
   id             String   @id @default(uuid(7))
   documentId     String
-  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// Composite FK keeps the denormalised tenant/owner columns truthful.
+  document       Document @relation(fields: [documentId, organizationId, ownerId], references: [id, organizationId, ownerId], onDelete: Cascade)
   /// Denormalised so retrieval can filter by tenant/owner in a single indexed query.
   organizationId String
   ownerId        String
@@ -929,6 +1100,7 @@ model DocumentChunk {
 
   @@unique([documentId, chunkIndex])
   @@index([organizationId, ownerId])
+  @@index([search], type: Gin)
 }
 
 model ExecutionDocument {
@@ -938,6 +1110,7 @@ model ExecutionDocument {
   document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@id([executionId, documentId])
+  @@index([documentId])
 }
 
 // ───────────────────── Platform ─────────────────────
@@ -1003,6 +1176,8 @@ model UsageRecord {
   createdAt      DateTime     @default(now())
 
   @@index([organizationId, createdAt])
+  @@index([executionId])
+  @@index([agentTaskId])
 }
 
 model IntegrationStatus {

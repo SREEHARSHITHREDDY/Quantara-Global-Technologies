@@ -4,29 +4,38 @@
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
-  "exports": { ".": "./src/index.ts", "./seed-data": "./src/seed/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./seed-data": "./src/seed/index.ts"
+  },
   "scripts": {
     "generate": "prisma generate",
     "migrate:dev": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed/run.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests",
+    "migrate:setup": "node scripts/db-setup.mjs",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "validate:schema": "node scripts/validate-schema.mjs",
+    "format": "prisma format"
   },
   "dependencies": {
-    "@prisma/client": "7.10.1",
     "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "@quantara/content": "workspace:*",
     "pg": "^8.23.1",
     "zod": "^4.6.7",
-    "@quantara/content": "workspace:*"
+    "@quantara/rbac": "workspace:*"
   },
   "devDependencies": {
+    "@prisma/prisma-schema-wasm": "8.1.0-1.d1b3f377ca835d73fd50954a5e22128b9ebdd6b8",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.15.0",
+    "dotenv": "^17.0.0",
     "prisma": "7.10.1",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",
-    "vitest": "^5.1.1",
-    "@types/pg": "^8.15.0",
-    "@types/node": "^22.0.0",
-    "dotenv": "^17.0.0"
+    "vitest": "^5.1.1"
   }
 }
