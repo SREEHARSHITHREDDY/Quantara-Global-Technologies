@@ -1,0 +1,1025 @@
+// Quantara platform schema. PostgreSQL only.
+// Identity models (User..TwoFactor) match the Better Auth CLI output for the
+// organization + admin + twoFactor plugins, extended with Quantara columns.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum OrganizationType { STAFF CLIENT }
+enum OrganizationStatus { ACTIVE SUSPENDED }
+enum RoleScope { ORGANIZATION }
+enum PublicationStatus { DRAFT IN_REVIEW PUBLISHED ARCHIVED }
+enum LeadStatus { NEW CONTACTED QUALIFIED PROPOSAL CONVERTED CLOSED REJECTED }
+enum EnquiryStatus { RECEIVED ACKNOWLEDGED ARCHIVED SPAM }
+enum SubscriberStatus { PENDING CONFIRMED UNSUBSCRIBED BOUNCED }
+enum EmploymentType { FULL_TIME PART_TIME CONTRACT INTERNSHIP }
+enum ApplicationStatus { RECEIVED UNDER_REVIEW SHORTLISTED INTERVIEW OFFER HIRED REJECTED WITHDRAWN }
+enum ConsultationMode { INDIVIDUAL MULTI_EXECUTIVE FULL_COUNCIL CEO_RECOMMENDATION }
+enum ConversationStatus { ACTIVE ARCHIVED }
+enum MessageRole { USER AGENT SYSTEM }
+enum ExecutionStatus { QUEUED RUNNING AWAITING_APPROVAL SUCCEEDED PARTIALLY_SUCCEEDED FAILED CANCELLED TIMED_OUT }
+enum AgentTaskKind { CLASSIFY ASSESS REVIEW REVISE CONSOLIDATE }
+enum AgentTaskStatus { PENDING RUNNING SUCCEEDED FAILED SKIPPED TIMED_OUT }
+enum AgentMessageType { FINDING CHALLENGE CLARIFICATION_REQUEST CLARIFICATION_RESPONSE REVISION }
+enum ConflictSeverity { LOW MEDIUM HIGH }
+enum ConflictStatus { OPEN RESOLVED ACKNOWLEDGED }
+enum ReportStatus { GENERATING READY FAILED }
+enum ApprovalStatus { PENDING APPROVED REJECTED EXPIRED CANCELLED }
+enum ApprovalCategory {
+  FINANCIAL_TRANSFER
+  PAYMENT
+  CONTRACT_SIGNING
+  LEGALLY_BINDING_COMMUNICATION
+  HIRING_OR_TERMINATION
+  PRODUCTION_INFRASTRUCTURE_CHANGE
+  RESTRICTED_RECORD_ACCESS
+  EXTERNAL_ACTION
+}
+enum DocumentStatus { UPLOADED SCANNING PROCESSING READY REJECTED FAILED DELETED }
+enum ScanStatus { NOT_SCANNED CLEAN INFECTED SCAN_UNAVAILABLE }
+enum DocumentVisibility { PRIVATE ORGANIZATION }
+enum AIProviderKind { ANTHROPIC OPENAI }
+enum HealthStatus { UNKNOWN HEALTHY DEGRADED DOWN }
+enum SourceKind { ANALYST_REPORT PRESS_RELEASE GOVERNMENT INDUSTRY_BODY NEWS OTHER }
+enum FactClass { VERIFIED_FACT USER_PROVIDED EXTERNAL_RESEARCH ASSUMPTION }
+
+// ───────────────── Identity (Better Auth) ─────────────────
+
+model User {
+  id               String    @id
+  name             String
+  email            String
+  emailVerified    Boolean   @default(false)
+  image            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  // admin plugin
+  role             String?
+  banned           Boolean?  @default(false)
+  banReason        String?
+  banExpires       DateTime?
+  // twoFactor plugin
+  twoFactorEnabled Boolean?  @default(false)
+  // Quantara
+  lastLoginAt      DateTime?
+
+  sessions    Session[]
+  accounts    Account[]
+  members     Member[]
+  invitations Invitation[]
+  twofactors  TwoFactor[]
+
+  conversations  Conversation[]
+  executions     Execution[]
+  reports        Report[]
+  documents      Document[]
+  assignedLeads  Lead[]            @relation("LeadAssignee")
+  leadNotes      LeadNote[]
+  insightsAuthored Author[]
+  decidedApprovals ApprovalRequest[] @relation("ApprovalDecider")
+  requestedApprovals ApprovalRequest[] @relation("ApprovalRequester")
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+  impersonatedBy       String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id        String   @id
+  name      String
+  slug      String
+  logo      String?
+  createdAt DateTime
+  metadata  String?
+  // Quantara
+  type                 OrganizationType   @default(CLIENT)
+  status               OrganizationStatus @default(ACTIVE)
+  monthlyTokenBudget   Int?
+  monthlyCostBudgetUsd Decimal?           @db.Decimal(12, 4)
+
+  members     Member[]
+  invitations Invitation[]
+  roles       Role[]
+  conversations Conversation[]
+  meetings    Meeting[]
+  executions  Execution[]
+  reports     Report[]
+  documents   Document[]
+  approvals   ApprovalRequest[]
+  usage       UsageRecord[]
+  audit       AuditLog[]
+
+  @@unique([slug])
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Role.key — resolved to permissions server-side (see @quantara/auth)
+  role           String       @default("council_user")
+  createdAt      DateTime
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+  @@map("twoFactor")
+}
+
+// ───────────────────── RBAC ─────────────────────
+
+/// Roles are organization-scoped. organizationId = null means a system role
+/// template available to every organization.
+model Role {
+  id             String       @id @default(uuid(7))
+  key            String
+  name           String
+  description    String?
+  system         Boolean      @default(false)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  permissions    RolePermission[]
+
+  @@unique([organizationId, key])
+  @@index([key])
+}
+
+model Permission {
+  id          String   @id @default(uuid(7))
+  key         String   @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+// ───────────────────── CMS ─────────────────────
+
+model SiteSetting {
+  key       String   @id
+  group     String   @default("general")
+  value     Json
+  isPublic  Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model Page {
+  id        String            @id @default(uuid(7))
+  key       String            @unique
+  title     String
+  status    PublicationStatus @default(DRAFT)
+  seoTitle  String?
+  seoDescription String?
+  blocks    ContentBlock[]
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model ContentBlock {
+  id        String   @id @default(uuid(7))
+  pageId    String
+  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  key       String
+  type      String
+  data      Json
+  sortOrder Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([pageId, key])
+  @@index([pageId, sortOrder])
+}
+
+model Service {
+  id          String            @id @default(uuid(7))
+  slug        String            @unique
+  title       String
+  summary     String
+  introduction String
+  overview    String
+  businessChallenges     String[]
+  enterpriseApplications String[]
+  status      PublicationStatus @default(DRAFT)
+  sortOrder   Int               @default(0)
+  seoTitle    String?
+  seoDescription String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  capabilities ServiceCapability[]
+  industries   ServiceIndustry[]
+  related      ServiceRelation[] @relation("ServiceRelationFrom")
+  relatedFrom  ServiceRelation[] @relation("ServiceRelationTo")
+  enquiries    ContactEnquiry[]
+
+  @@index([status, sortOrder])
+}
+
+model ServiceCapability {
+  id        String  @id @default(uuid(7))
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  title     String
+  description String?
+  sortOrder Int     @default(0)
+
+  @@index([serviceId, sortOrder])
+}
+
+model Industry {
+  id          String            @id @default(uuid(7))
+  slug        String            @unique
+  title       String
+  summary     String
+  introduction String
+  challenges  String[]
+  status      PublicationStatus @default(DRAFT)
+  sortOrder   Int               @default(0)
+  seoTitle    String?
+  seoDescription String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  services  ServiceIndustry[]
+  enquiries ContactEnquiry[]
+
+  @@index([status, sortOrder])
+}
+
+model ServiceIndustry {
+  serviceId  String
+  industryId String
+  /// How this documented service addresses the industry's challenges.
+  relevance  String?
+  service    Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  industry   Industry @relation(fields: [industryId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, industryId])
+  @@index([industryId])
+}
+
+model ServiceRelation {
+  fromId String
+  toId   String
+  from   Service @relation("ServiceRelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to     Service @relation("ServiceRelationTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@id([fromId, toId])
+}
+
+/// Every external market statistic MUST reference a Source with a publication
+/// date. A CHECK constraint (see migrations) forbids publishing one without it.
+model Source {
+  id          String     @id @default(uuid(7))
+  title       String
+  publisher   String
+  url         String
+  kind        SourceKind @default(OTHER)
+  publishedAt DateTime   @db.Date
+  accessedAt  DateTime   @db.Date
+  notes       String?
+  statistics  MarketStatistic[]
+  createdAt   DateTime   @default(now())
+
+  @@unique([url, publishedAt])
+}
+
+model MarketStatistic {
+  id          String   @id @default(uuid(7))
+  key         String   @unique
+  /// The claim as the source states it, attributed to the source (never to Quantara).
+  statement   String
+  theme       String
+  sourceId    String?
+  source      Source?  @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  /// Source's own as-of / forecast date for the figure.
+  asOf        DateTime? @db.Date
+  /// Verified against the cited source by a human or a logged check.
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([theme])
+}
+
+model Author {
+  id       String    @id @default(uuid(7))
+  name     String
+  title    String?
+  bio      String?
+  image    String?
+  userId   String?
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  insights Insight[]
+}
+
+model InsightCategory {
+  id       String    @id @default(uuid(7))
+  slug     String    @unique
+  name     String
+  insights Insight[]
+}
+
+model Tag {
+  id       String       @id @default(uuid(7))
+  slug     String       @unique
+  name     String
+  insights InsightTag[]
+}
+
+model Insight {
+  id            String            @id @default(uuid(7))
+  slug          String            @unique
+  title         String
+  excerpt       String
+  body          String
+  status        PublicationStatus @default(DRAFT)
+  publishedAt   DateTime?
+  featuredImage String?
+  featuredImageAlt String?
+  seoTitle      String?
+  seoDescription String?
+  canonicalUrl  String?
+  authorId      String?
+  author        Author?           @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  categoryId    String?
+  category      InsightCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags          InsightTag[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status, publishedAt])
+  @@index([categoryId])
+}
+
+model InsightTag {
+  insightId String
+  tagId     String
+  insight   Insight @relation(fields: [insightId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([insightId, tagId])
+  @@index([tagId])
+}
+
+// ───────────── Enquiries, leads, newsletter ─────────────
+
+model ContactEnquiry {
+  id            String        @id @default(uuid(7))
+  /// Human-friendly ID shown on the confirmation page and in emails.
+  referenceId   String        @unique
+  fullName      String
+  businessEmail String
+  organization  String
+  jobDesignation String
+  phone         String?
+  country       String
+  serviceId     String?
+  service       Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  industryId    String?
+  industry      Industry?     @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  projectRequirements String
+  engagementTimeline  String?
+  additionalInformation String?
+  privacyConsent   Boolean
+  consentAt        DateTime
+  consentTextVersion String
+  status        EnquiryStatus @default(RECEIVED)
+  spamScore     Int           @default(0)
+  ipHash        String?
+  userAgent     String?
+  /// Client-supplied idempotency key to absorb duplicate submissions.
+  idempotencyKey String?      @unique
+  acknowledgedAt DateTime?
+  createdAt     DateTime      @default(now())
+  lead          Lead?
+
+  @@index([businessEmail])
+  @@index([createdAt])
+}
+
+model Lead {
+  id           String     @id @default(uuid(7))
+  enquiryId    String?    @unique
+  enquiry      ContactEnquiry? @relation(fields: [enquiryId], references: [id], onDelete: SetNull)
+  status       LeadStatus @default(NEW)
+  assignedToId String?
+  assignedTo   User?      @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  source       String     @default("website_contact_form")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  notes        LeadNote[]
+  activities   LeadActivity[]
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+/// Internal only. Never exposed through any public route.
+model LeadNote {
+  id        String   @id @default(uuid(7))
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model LeadActivity {
+  id        String   @id @default(uuid(7))
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actorId   String?
+  type      String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([leadId, createdAt])
+}
+
+model NewsletterSubscriber {
+  id               String           @id @default(uuid(7))
+  email            String           @unique
+  status           SubscriberStatus @default(PENDING)
+  /// SHA-256 of the confirmation / unsubscribe tokens (raw tokens only ever emailed).
+  confirmTokenHash     String?      @unique
+  unsubscribeTokenHash String?      @unique
+  consentAt        DateTime
+  confirmedAt      DateTime?
+  unsubscribedAt   DateTime?
+  createdAt        DateTime         @default(now())
+}
+
+// ───────────────────── Careers ─────────────────────
+
+model Job {
+  id           String            @id @default(uuid(7))
+  slug         String            @unique
+  title        String
+  department   String
+  employmentType EmploymentType
+  location     String
+  description  String
+  responsibilities String[]
+  requirements String[]
+  status       PublicationStatus @default(DRAFT)
+  postedAt     DateTime?
+  closesAt     DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  applications JobApplication[]
+
+  @@index([status, postedAt])
+}
+
+model JobApplication {
+  id          String            @id @default(uuid(7))
+  referenceId String            @unique
+  jobId       String
+  job         Job               @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  applicantName  String
+  applicantEmail String
+  phone       String?
+  coverLetter String?
+  /// Private object-storage key. Never a public URL.
+  resumeStorageKey String
+  resumeFilename   String
+  resumeMimeType   String
+  resumeSizeBytes  Int
+  resumeSha256     String
+  privacyConsent   Boolean
+  consentAt        DateTime
+  status      ApplicationStatus @default(RECEIVED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  events      ApplicationStatusEvent[]
+
+  @@unique([jobId, applicantEmail])
+  @@index([status])
+}
+
+model ApplicationStatusEvent {
+  id            String            @id @default(uuid(7))
+  applicationId String
+  application   JobApplication    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  actorId       String?
+  note          String?
+  createdAt     DateTime          @default(now())
+
+  @@index([applicationId, createdAt])
+}
+
+// ───────────────────── Executive Council ─────────────────────
+
+model Agent {
+  id             String   @id @default(uuid(7))
+  /// CEO, CFO, CTO, COO, CHRO, CMO, CRO, CISO, CLO, CSO
+  key            String   @unique
+  name           String
+  designation    String
+  department     String
+  responsibilities String[]
+  capabilities   String[]
+  description    String
+  isSupervisor   Boolean  @default(false)
+  isEnabled      Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  configs   AgentConfig[]
+  tasks     AgentTask[]
+  messages  Message[]
+  sent      AgentMessage[] @relation("AgentMessageFrom")
+  received  AgentMessage[] @relation("AgentMessageTo")
+  participations MeetingParticipant[]
+}
+
+model AgentConfig {
+  id            String   @id @default(uuid(7))
+  agentId       String
+  agent         Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  version       Int
+  isActive      Boolean  @default(false)
+  systemPrompt  String
+  /// Tool keys this agent may call. Enforced by the backend tool gateway.
+  allowedTools  String[]
+  outputSchemaKey String
+  providerKey   String?
+  model         String?
+  temperature   Float?
+  maxOutputTokens Int?
+  timeoutMs     Int?
+  createdById   String?
+  createdAt     DateTime @default(now())
+
+  @@unique([agentId, version])
+  @@index([agentId, isActive])
+}
+
+model Conversation {
+  id             String             @id @default(uuid(7))
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  mode           ConsultationMode
+  status         ConversationStatus @default(ACTIVE)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  messages       Message[]
+  executions     Execution[]
+  meeting        Meeting?
+
+  @@index([organizationId, userId, updatedAt])
+}
+
+model Message {
+  id             String       @id @default(uuid(7))
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  agentId        String?
+  agent          Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  executionId    String?
+  execution      Execution?   @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  content        String
+  structured     Json?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model Meeting {
+  id             String       @id @default(uuid(7))
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversationId String       @unique
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  subject        String
+  mode           ConsultationMode
+  startedAt      DateTime     @default(now())
+  endedAt        DateTime?
+  participants   MeetingParticipant[]
+  executions     Execution[]
+
+  @@index([organizationId, startedAt])
+}
+
+model MeetingParticipant {
+  meetingId String
+  agentId   String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  agent     Agent   @relation(fields: [agentId], references: [id], onDelete: Restrict)
+
+  @@id([meetingId, agentId])
+}
+
+model Execution {
+  id             String          @id @default(uuid(7))
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  meetingId      String?
+  meeting        Meeting?        @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  mode           ConsultationMode
+  prompt         String
+  status         ExecutionStatus @default(QUEUED)
+  // controls
+  maxIterations  Int             @default(2)
+  iteration      Int             @default(0)
+  tokenBudget    Int
+  tokensUsed     Int             @default(0)
+  costBudgetUsd  Decimal         @db.Decimal(12, 6)
+  costUsd        Decimal         @default(0) @db.Decimal(12, 6)
+  deadlineAt     DateTime?
+  jobId          String?
+  error          String?
+  cancelRequestedAt DateTime?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime        @default(now())
+
+  tasks      AgentTask[]
+  agentMessages AgentMessage[]
+  conflicts  Conflict[]
+  events     AgentEvent[]
+  messages   Message[]
+  approvals  ApprovalRequest[]
+  report     Report?
+  usage      UsageRecord[]
+  documents  ExecutionDocument[]
+
+  @@index([organizationId, userId, createdAt])
+  @@index([status])
+}
+
+model AgentTask {
+  id          String          @id @default(uuid(7))
+  executionId String
+  execution   Execution       @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  agentId     String
+  agent       Agent           @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  agentConfigId String?
+  kind        AgentTaskKind
+  round       Int             @default(0)
+  attempt     Int             @default(1)
+  status      AgentTaskStatus @default(PENDING)
+  input       Json?
+  /// Validated against the agent's output schema before being stored here.
+  output      Json?
+  validationErrors Json?
+  provider    String?
+  model       String?
+  tokensIn    Int             @default(0)
+  tokensOut   Int             @default(0)
+  costUsd     Decimal         @default(0) @db.Decimal(12, 6)
+  latencyMs   Int?
+  error       String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime        @default(now())
+  usage       UsageRecord[]
+
+  @@index([executionId, round])
+  @@index([agentId])
+}
+
+/// Structured inter-agent communication (never free-form chat).
+model AgentMessage {
+  id          String           @id @default(uuid(7))
+  executionId String
+  execution   Execution        @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  fromAgentId String
+  fromAgent   Agent            @relation("AgentMessageFrom", fields: [fromAgentId], references: [id], onDelete: Restrict)
+  toAgentId   String?
+  toAgent     Agent?           @relation("AgentMessageTo", fields: [toAgentId], references: [id], onDelete: Restrict)
+  type        AgentMessageType
+  round       Int
+  payload     Json
+  createdAt   DateTime         @default(now())
+
+  @@index([executionId, round])
+}
+
+model Conflict {
+  id          String           @id @default(uuid(7))
+  executionId String
+  execution   Execution        @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  topic       String
+  description String
+  agentKeys   String[]
+  severity    ConflictSeverity @default(MEDIUM)
+  status      ConflictStatus   @default(OPEN)
+  resolution  String?
+  createdAt   DateTime         @default(now())
+
+  @@index([executionId])
+}
+
+/// Real backend execution events, the source for SSE. seq is monotonic per execution.
+model AgentEvent {
+  id          String    @id @default(uuid(7))
+  executionId String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  seq         Int
+  type        String
+  agentKey    String?
+  payload     Json?
+  createdAt   DateTime  @default(now())
+
+  @@unique([executionId, seq])
+}
+
+model Report {
+  id             String       @id @default(uuid(7))
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  executionId    String       @unique
+  execution      Execution    @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  title          String
+  status         ReportStatus @default(GENERATING)
+  /// 20-section structure; each claim carries a FactClass label.
+  sections       Json?
+  markdown       String?
+  confidenceLevel String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, userId, createdAt])
+}
+
+model ApprovalRequest {
+  id             String           @id @default(uuid(7))
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  executionId    String?
+  execution      Execution?       @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  requestedByAgentKey String?
+  requesterId    String?
+  requester      User?            @relation("ApprovalRequester", fields: [requesterId], references: [id], onDelete: SetNull)
+  category       ApprovalCategory
+  title          String
+  description    String
+  payload        Json?
+  status         ApprovalStatus   @default(PENDING)
+  decidedById    String?
+  decidedBy      User?            @relation("ApprovalDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt      DateTime?
+  decisionNote   String?
+  expiresAt      DateTime?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, status])
+}
+
+model Document {
+  id             String             @id @default(uuid(7))
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  filename       String
+  mimeType       String
+  sizeBytes      Int
+  sha256         String
+  /// Private object-storage key. Never a public URL.
+  storageKey     String             @unique
+  status         DocumentStatus     @default(UPLOADED)
+  scanStatus     ScanStatus         @default(NOT_SCANNED)
+  visibility     DocumentVisibility @default(PRIVATE)
+  processingError String?
+  retentionUntil DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime           @default(now())
+  chunks         DocumentChunk[]
+  executions     ExecutionDocument[]
+
+  @@index([organizationId, ownerId])
+  @@index([status])
+}
+
+model DocumentChunk {
+  id             String   @id @default(uuid(7))
+  documentId     String
+  document       Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// Denormalised so retrieval can filter by tenant/owner in a single indexed query.
+  organizationId String
+  ownerId        String
+  chunkIndex     Int
+  text           String
+  tokenCount     Int      @default(0)
+  /// Populated by a generated column / trigger; GIN-indexed (see migrations).
+  search         Unsupported("tsvector")?
+
+  @@unique([documentId, chunkIndex])
+  @@index([organizationId, ownerId])
+}
+
+model ExecutionDocument {
+  executionId String
+  documentId  String
+  execution   Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([executionId, documentId])
+}
+
+// ───────────────────── Platform ─────────────────────
+
+model AuditLog {
+  id             String   @id @default(uuid(7))
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorId        String?
+  actorType      String   @default("user")
+  action         String
+  resourceType   String?
+  resourceId     String?
+  metadata       Json?
+  ipHash         String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
+  @@index([action])
+}
+
+model ProviderConfig {
+  id              String         @id @default(uuid(7))
+  key             String         @unique
+  provider        AIProviderKind
+  displayName     String
+  defaultModel    String
+  isEnabled       Boolean        @default(false)
+  fallbackOrder   Int?
+  temperature     Float?
+  maxOutputTokens Int?
+  timeoutMs       Int            @default(60000)
+  maxRetries      Int            @default(2)
+  /// Name of the env var holding the key, OR an AES-256-GCM ciphertext
+  /// (master key from env) when an admin enters a key in the portal.
+  credentialEnvVar String?
+  encryptedApiKey  String?
+  inputCostPerMTokUsd  Decimal?  @db.Decimal(12, 6)
+  outputCostPerMTokUsd Decimal?  @db.Decimal(12, 6)
+  health          HealthStatus   @default(UNKNOWN)
+  lastHealthCheckAt DateTime?
+  lastHealthError String?
+  updatedAt       DateTime       @updatedAt
+}
+
+model UsageRecord {
+  id             String       @id @default(uuid(7))
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  executionId    String?
+  execution      Execution?   @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  agentTaskId    String?
+  agentTask      AgentTask?   @relation(fields: [agentTaskId], references: [id], onDelete: SetNull)
+  provider       String
+  model          String
+  tokensIn       Int
+  tokensOut      Int
+  costUsd        Decimal      @db.Decimal(12, 6)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+model IntegrationStatus {
+  key            String    @id
+  displayName    String
+  isEnabled      Boolean   @default(false)
+  isConfigured   Boolean   @default(false)
+  lastTestedAt   DateTime?
+  lastTestOk     Boolean?
+  lastError      String?
+  updatedAt      DateTime  @updatedAt
+}
+
+model RateLimitBucket {
+  key         String
+  windowStart DateTime
+  count       Int      @default(1)
+
+  @@id([key, windowStart])
+}

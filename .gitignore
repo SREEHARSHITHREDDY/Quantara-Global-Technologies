@@ -1,0 +1,24 @@
+node_modules/
+.next/
+dist/
+coverage/
+playwright-report/
+test-results/
+.turbo/
+# secrets & private data
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# database dumps and uploads
+*.dump
+*.sql.gz
+backups/
+uploads/
+storage/
+private-documents/
+# generated
+packages/db/src/generated/
+*.tsbuildinfo
+.DS_Store

@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "workers/*"
+onlyBuiltDependencies:
+  - "@prisma/engines"
+  - prisma
+  - esbuild
+  - sharp
+  - argon2

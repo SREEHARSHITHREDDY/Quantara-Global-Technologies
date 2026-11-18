@@ -1,0 +1,26 @@
+{
+  "name": "quantara-platform",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @quantara/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:migrate": "pnpm --filter @quantara/db migrate:deploy",
+    "db:seed": "pnpm --filter @quantara/db seed"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp",
+      "argon2",
+      "@node-rs/argon2"
+    ]
+  }
+}
