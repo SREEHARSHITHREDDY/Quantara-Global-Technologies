@@ -41,6 +41,15 @@ The worker must run, or consultations stay queued. Run both under a process supe
 4. Enable the Council for a customer workspace: `pnpm --filter @quantara/db council:plan -- customer@example.com TRIAL 14`.
 5. Enter real contact details in admin Settings.
 
+## Deploying the website on Vercel
+Vercel runs the **website only**. The worker, the database and file storage need other homes (see below).
+* **Project settings:** Root Directory `apps/web`, Framework Next.js, Node.js Version 22.x, install command left as default (`pnpm install`). The build script generates the Prisma client first, so no extra build command is needed.
+* **Environment variables** (Production): `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `NEXT_PUBLIC_SITE_URL` (both the final public URL), `APP_IP_HASH_SALT`, `RESEND_API_KEY`, `MAIL_FROM`, `COUNCIL_ENABLE_MOCK=1` (preview). Set them before the first deploy.
+* **Database:** a hosted PostgreSQL (Neon, Supabase or similar). Use its pooled connection string for `DATABASE_URL` on Vercel. Run migrations and seed once from your computer against it: `DATABASE_URL="..." pnpm db:migrate && DATABASE_URL="..." pnpm db:seed`.
+* **Worker:** Vercel cannot run it. Run `pnpm --filter @quantara/worker start` as an always-on process on a service such as Railway, Render or Fly, with the same `DATABASE_URL` and `COUNCIL_ENABLE_MOCK=1`. Without it, consultations stay queued.
+* **Resume uploads:** Vercel's disk is temporary, so job applications with a resume are refused until object storage (S3) support is built. The rest of the Careers page works.
+* **Live progress:** the progress stream may be cut by the platform's time limit; the page reconnects and resumes from where it stopped, so no events are lost.
+
 ## Opening the Council to everyone (live preview)
 New workspaces are open by default (`COUNCIL_DEFAULT_PLAN` blank). For a public demo set `COUNCIL_ENABLE_MOCK=1` on **both** web and worker: without it the Mock provider is off in production and the Council reports "not available". Every answer is then labelled as a simulation and the Council page shows a Preview notice.
 Workspaces that already exist keep their plan. To open all of those that are still closed: `pnpm --filter @quantara/db council:plan -- --all STANDARD`.

@@ -167,6 +167,11 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 - ✅ ARCHITECTURE, AGENTS, API, SECURITY, TESTING, DEPLOYMENT written from the code
 - ⚠️ DEPLOYMENT has not been rehearsed on a hosting platform
 
+## Vercel build
+- ✅ Build now generates the Prisma client first (`apps/web` build script) and pins Node 22.x; fixes "Can't resolve ./generated/client"
+- ⚠️ Unverified: the sandbox cannot run `prisma generate`, so the first Vercel build is the real test
+- ⚠️ Vercel hosts the website only; the worker needs an always-on host, resumes need S3 (see docs/DEPLOYMENT.md)
+
 ## Open Council preview
 - ✅ New customer workspaces start on STANDARD by default (`COUNCIL_DEFAULT_PLAN`; unrecognised values close access); audited as a system action
 - ✅ `council:plan -- --all STANDARD` opens every existing customer workspace still disabled; unit-tested and DB-tested
