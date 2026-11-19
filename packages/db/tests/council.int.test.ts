@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, createApprovalRequests, listApprovals, decideApproval, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, createApprovalRequests, getCouncilDashboard, listApprovals, decideApproval, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -335,5 +335,32 @@ describe("approvals", () => {
     const list = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "own" });
     expect(list).toHaveLength(1);
     expect(list[0]).toMatchObject({ category: "EXTERNAL_ACTION", agent: "CEO" });
+  });
+});
+
+describe("council dashboard", () => {
+  it("counts only the caller's own work in own scope, and the whole organization in org scope", async () => {
+    const t = await tenant();
+    const other = await makeUser(); await makeMember(t.org.id, other.id);
+    const mine = await reserve(t); if (!mine.ok) throw new Error("reserve");
+    const oc = await db.conversation.create({ data: { organizationId: t.org.id, userId: other.id, title: "o", mode: "FULL_COUNCIL" } });
+    await db.execution.create({ data: { organizationId: t.org.id, userId: other.id, conversationId: oc.id, mode: "FULL_COUNCIL", prompt: "theirs", status: "SUCCEEDED", tokenBudget: 10, costBudgetUsd: "0.01", tokensUsed: 500, costUsd: "0.25", deadlineAt: new Date(Date.now() + 60_000) } });
+    await createApprovalRequests(db, { organizationId: t.org.id, executionId: mine.executionId, requesterId: t.user.id, approvals: [{ agent: "CEO", action: "Announce", reason: "r" }] });
+    const own = await getCouncilDashboard(db, { organizationId: t.org.id, userId: t.user.id, scope: "own" });
+    const org = await getCouncilDashboard(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    expect(own).toMatchObject({ totalSessions: 1, activeRuns: 1, pendingApprovals: 1 });
+    expect(own.usage.tokenBudget).toBeNull();
+    expect(org).toMatchObject({ totalSessions: 2, activeRuns: 1, pendingApprovals: 1 });
+    expect(org.usage.tokens).toBe(500);
+    expect(org.usage.costUsd).toBeCloseTo(0.25);
+    expect(org.usage.tokenBudget).toBeGreaterThan(0);
+    expect(org.recentActivity.length).toBeGreaterThanOrEqual(3);
+    expect(org.recentActivity.some((x) => x.kind === "approval")).toBe(true);
+  });
+  it("never includes another organization's numbers", async () => {
+    const a = await tenant(); const b = await tenant();
+    await reserve(b);
+    const d = await getCouncilDashboard(db, { organizationId: a.org.id, userId: a.user.id, scope: "org" });
+    expect(d).toMatchObject({ totalSessions: 0, activeRuns: 0, completedReports: 0, pendingApprovals: 0, recentActivity: [] });
   });
 });

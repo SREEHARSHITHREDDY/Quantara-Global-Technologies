@@ -383,3 +383,46 @@ export async function decideApproval(db: PrismaClient, a: { id: string; organiza
     return { ok: true as const, approval: toView(row) };
   });
 }
+
+// ---- Dashboard -------------------------------------------------------------------------------------------
+
+export interface DashboardActivity { kind: "consultation" | "approval"; id: string; label: string; status: string; at: Date; href: string }
+export interface CouncilDashboard {
+  scope: "own" | "org";
+  totalSessions: number; activeRuns: number; completedReports: number; pendingApprovals: number;
+  usage: { tokens: number; costUsd: number; periodStart: Date; tokenBudget: number | null; costBudgetUsd: number | null };
+  recentActivity: DashboardActivity[];
+}
+
+/** Everything the council home page shows, in one read. `org` is for people who may see the whole organization. */
+export async function getCouncilDashboard(db: PrismaClient, a: { organizationId: string; userId: string; scope: "own" | "org"; now?: Date }): Promise<CouncilDashboard> {
+  const now = a.now ?? new Date();
+  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const mine = a.scope === "own";
+  const exWhere = { organizationId: a.organizationId, ...(mine ? { userId: a.userId } : {}) };
+  const apWhere = { organizationId: a.organizationId, ...(mine ? { requesterId: a.userId } : {}) };
+  const [totalSessions, activeRuns, completedReports, pendingApprovals, usage, org, recentEx, recentAp] = await Promise.all([
+    db.execution.count({ where: exWhere }),
+    db.execution.count({ where: { ...exWhere, status: { in: NON_TERMINAL } } }),
+    db.report.count({ where: { ...exWhere, status: "READY" } }),
+    db.approvalRequest.count({ where: { ...apWhere, status: "PENDING", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
+    db.execution.aggregate({ where: { ...exWhere, createdAt: { gte: periodStart } }, _sum: { tokensUsed: true, costUsd: true } }),
+    mine ? Promise.resolve(null) : db.organization.findUnique({ where: { id: a.organizationId }, select: { monthlyTokenBudget: true, monthlyCostBudgetUsd: true } }),
+    db.execution.findMany({ where: exWhere, orderBy: { createdAt: "desc" }, take: 6, select: { id: true, prompt: true, status: true, createdAt: true } }),
+    db.approvalRequest.findMany({ where: apWhere, orderBy: { createdAt: "desc" }, take: 6, select: { id: true, title: true, status: true, createdAt: true, decidedAt: true } }),
+  ]);
+  const activity: DashboardActivity[] = [
+    ...(recentEx as { id: string; prompt: string; status: string; createdAt: Date }[]).map((e) => ({ kind: "consultation" as const, id: e.id, label: clip(e.prompt, 90), status: e.status, at: e.createdAt, href: `/council/${e.id}` })),
+    ...(recentAp as { id: string; title: string; status: string; createdAt: Date; decidedAt: Date | null }[]).map((p) => ({ kind: "approval" as const, id: p.id, label: clip(p.title, 90), status: p.status, at: p.decidedAt ?? p.createdAt, href: "/council/approvals" })),
+  ].sort((x, y) => y.at.getTime() - x.at.getTime()).slice(0, 8);
+  const budget = org as { monthlyTokenBudget: number | null; monthlyCostBudgetUsd: unknown } | null;
+  return {
+    scope: a.scope, totalSessions, activeRuns, completedReports, pendingApprovals,
+    usage: {
+      tokens: usage._sum.tokensUsed ?? 0, costUsd: num(usage._sum.costUsd), periodStart,
+      tokenBudget: mine ? null : (budget?.monthlyTokenBudget ?? DEFAULT_MONTHLY_BUDGET.tokens),
+      costBudgetUsd: mine ? null : (budget?.monthlyCostBudgetUsd == null ? DEFAULT_MONTHLY_BUDGET.costUsd : num(budget.monthlyCostBudgetUsd)),
+    },
+    recentActivity: activity,
+  };
+}

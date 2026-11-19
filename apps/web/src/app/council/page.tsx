@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS, TEMPLATES, councilAccess, type ConsultationMode } from "@quantara/council";
-import { getCouncilOrgAccess, getPrisma, listApprovals, listExecutionsForUser } from "@quantara/db";
+import { getCouncilDashboard, getCouncilOrgAccess, getPrisma, listExecutionsForUser } from "@quantara/db";
 import { can } from "@quantara/rbac";
 import { PageHero } from "@/components/site/page-hero";
 import { Badge, Card, Container } from "@/components/ui/layout";
 import { STAGE_LABELS } from "@/lib/council-progress";
 import { getCouncilCaller } from "@/lib/council-caller";
 import { councilProviderChoices } from "@/server/council-runtime";
+import { DashboardPanel } from "./dashboard-panel";
 import { StartForm } from "./start-form";
 
 export const metadata: Metadata = { title: "Executive Council", robots: { index: false } };
@@ -42,9 +43,11 @@ export default async function CouncilPage() {
     );
   }
 
-  const pendingCount = (await listApprovals(db, { organizationId: caller.organizationId, userId: caller.userId, scope: can(caller.ctx, "council:approval:decide") ? "org" : "own", status: "PENDING" })).length;
+  const orgWide = can(caller.ctx, "council:history:read:org");
+  const dash = await getCouncilDashboard(db, { organizationId: caller.organizationId, userId: caller.userId, scope: orgWide ? "org" : "own" });
+  const pendingCount = dash.pendingApprovals;
   const [history, providers] = await Promise.all([
-    listExecutionsForUser(db, { organizationId: caller.organizationId, userId: caller.userId, orgWide: can(caller.ctx, "council:history:read:org") }),
+    listExecutionsForUser(db, { organizationId: caller.organizationId, userId: caller.userId, orgWide }),
     councilProviderChoices(),
   ]);
   const modes = MODES.map((m) => ({ ...m, allowed: access.limits.modes.includes(m.id) }));
@@ -52,7 +55,9 @@ export default async function CouncilPage() {
     <>
       <PageHero eyebrow="Executive Council" title="Consult your executive team" description="Output is advisory. It supports a decision and does not replace professional advice." />
       <section className="bg-mist-50 py-12 sm:py-16">
-        <Container className="grid max-w-6xl gap-8 lg:grid-cols-[3fr_2fr]">
+        <Container className="max-w-6xl space-y-8">
+          <DashboardPanel d={dash} />
+          <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
           <Card>
             <StartForm modes={modes} agents={AGENTS.map((a) => ({ code: a.code, name: a.name }))} templates={TEMPLATES.map((t) => ({ id: t.id, name: t.name, summary: t.summary, participants: t.participants }))} providers={providers} />
           </Card>
@@ -70,6 +75,7 @@ export default async function CouncilPage() {
                 </li>
               ))}
             </ul>
+          </div>
           </div>
         </Container>
       </section>
