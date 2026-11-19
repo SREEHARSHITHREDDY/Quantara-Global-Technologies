@@ -13,10 +13,11 @@ export default async function ContactPage() {
       <PageHero eyebrow="Contact" title="Let's discuss your enterprise transformation" description="Tell us about your objectives. Our team will review your enquiry and respond." />
       <section className="bg-white py-16 sm:py-24">
         <Container className="max-w-3xl">
-          {(c.email || c.phone || c.address) && (
+          {(c.email || c.careersEmail || c.phone || c.address) && (
             <address className="mb-10 rounded-[var(--radius-card)] border border-mist-200 bg-mist-50 p-6 text-sm not-italic text-slate-700">
               <p className="font-semibold text-navy-900">Prefer to write or call?</p>
-              {c.email && <p className="mt-2"><a className="text-electric-600 underline" href={`mailto:${c.email}`}>{c.email}</a></p>}
+              {c.email && <p className="mt-2">General: <a className="text-electric-600 underline" href={`mailto:${c.email}`}>{c.email}</a></p>}
+              {c.careersEmail && <p className="mt-1">Careers: <a className="text-electric-600 underline" href={`mailto:${c.careersEmail}`}>{c.careersEmail}</a></p>}
               {c.phone && <p className="mt-1"><a className="text-electric-600 underline" href={telHref(c.phone)}>{c.phone}</a></p>}
               {c.address && <p className="mt-1 whitespace-pre-line">{c.address}</p>}
             </address>

@@ -3,6 +3,7 @@ import { company, industries, services } from "@quantara/content";
 import { LEGAL_NAV, MAIN_NAV, liveOnly } from "@/lib/routes";
 import { Container } from "@/components/ui/layout";
 import { getSiteContact, telHref } from "@/lib/site-settings";
+import { NewsletterForm } from "@/components/site/newsletter-form";
 
 // Contact details, legal entity name and social links come from the CMS (SiteSetting rows edited in
 // /admin/settings). Nothing is hardcoded; when a value is not set it is simply not shown.
@@ -17,9 +18,10 @@ export async function Footer() {
         <div>
           <p className="font-display text-lg font-semibold">{company.name}</p>
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-mist-300">{company.closingTagline}</p>
-          {(c.email || c.phone || c.address) && (
+          {(c.email || c.careersEmail || c.phone || c.address) && (
             <address className="mt-5 space-y-1 text-sm not-italic text-mist-300">
               {c.email && <p><a className="hover:text-white" href={`mailto:${c.email}`}>{c.email}</a></p>}
+              {c.careersEmail && <p>Careers: <a className="hover:text-white" href={`mailto:${c.careersEmail}`}>{c.careersEmail}</a></p>}
               {c.phone && <p><a className="hover:text-white" href={telHref(c.phone)}>{c.phone}</a></p>}
               {c.address && <p className="whitespace-pre-line">{c.address}</p>}
             </address>
@@ -30,6 +32,8 @@ export async function Footer() {
               {c.x && <li><a className={col} href={c.x} target="_blank" rel="noopener noreferrer">X</a></li>}
             </ul>
           )}
+          <p className="mt-6 text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Stay informed</p>
+          <NewsletterForm />
         </div>
         <nav aria-label="Services"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">What we do</p>
           <ul className="mt-4 space-y-2">{services.map((s) => <li key={s.slug}><Link className={col} href={`/services/${s.slug}`}>{s.title}</Link></li>)}</ul></nav>

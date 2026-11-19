@@ -1,4 +1,4 @@
-export interface MailMessage { to: string; subject: string; text: string; kind: "verify-email" | "reset-password" | "invitation" | "other" }
+export interface MailMessage { to: string; subject: string; text: string; kind: "verify-email" | "reset-password" | "invitation" | "newsletter" | "other" }
 export interface Mailer { readonly name: string; readonly configured: boolean; send(msg: MailMessage): Promise<void> }
 
 export class EmailNotConfiguredError extends Error {

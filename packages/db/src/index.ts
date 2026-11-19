@@ -6,6 +6,7 @@ export * from "./generated/client";
 export * from "./enquiries";
 export * from "./workspace";
 export * from "./admin";
+export * from "./newsletter";
 export * from "./careers";
 export * from "./insights";
 export * from "./council";

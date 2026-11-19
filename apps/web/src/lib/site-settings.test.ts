@@ -6,6 +6,10 @@ describe("toSiteContact", () => {
     expect(toSiteContact({ "contact.email": "hello@example.com", "contact.phone": "+91 98765 43210", "company.legalName": "Example Pvt Ltd", "social.linkedin": "https://www.linkedin.com/company/x" }))
       .toEqual({ email: "hello@example.com", phone: "+91 98765 43210", legalName: "Example Pvt Ltd", linkedin: "https://www.linkedin.com/company/x" });
   });
+  it("maps the careers email and drops a malformed one", () => {
+    expect(toSiteContact({ "contact.careersEmail": "hr@example.com" })).toEqual({ careersEmail: "hr@example.com" });
+    expect(toSiteContact({ "contact.careersEmail": "nope" })).toEqual({});
+  });
   it("returns nothing when nothing is set (no hardcoded fallbacks)", () => { expect(toSiteContact({})).toEqual({}); });
   it("drops a malformed email and non-https social links", () => {
     expect(toSiteContact({ "contact.email": "not-an-email", "social.x": "javascript:alert(1)", "social.linkedin": "http://insecure.example" })).toEqual({});

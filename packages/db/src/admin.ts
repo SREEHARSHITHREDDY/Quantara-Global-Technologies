@@ -9,6 +9,7 @@ export const ENQUIRY_STATUSES: readonly EnquiryStatusValue[] = ["RECEIVED", "ACK
 /** Settings editable in /admin/settings. Values are plain text; empty string clears the setting. */
 export const EDITABLE_SETTINGS = [
   { key: "contact.email", label: "Contact email", group: "contact", isPublic: true, kind: "email" },
+  { key: "contact.careersEmail", label: "Careers / HR email", group: "contact", isPublic: true, kind: "email" },
   { key: "contact.phone", label: "Contact phone", group: "contact", isPublic: true, kind: "text" },
   { key: "contact.address", label: "Registered address", group: "contact", isPublic: true, kind: "textarea" },
   { key: "company.legalName", label: "Legal entity name", group: "company", isPublic: true, kind: "text" },

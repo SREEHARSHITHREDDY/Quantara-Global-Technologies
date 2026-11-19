@@ -1,7 +1,7 @@
 import { getPrisma, getPublicSettings } from "@quantara/db";
 
 export interface SiteContact {
-  email?: string; phone?: string; address?: string;
+  email?: string; careersEmail?: string; phone?: string; address?: string;
   legalName?: string; registrationNumber?: string;
   linkedin?: string; x?: string;
 }
@@ -13,6 +13,7 @@ const isEmail = (v: string | undefined): v is string => !!v && /^[^\s@]+@[^\s@]+
 export function toSiteContact(s: Record<string, string>): SiteContact {
   const out: SiteContact = {};
   if (isEmail(s["contact.email"])) out.email = s["contact.email"];
+  if (isEmail(s["contact.careersEmail"])) out.careersEmail = s["contact.careersEmail"];
   if (s["contact.phone"]) out.phone = s["contact.phone"];
   if (s["contact.address"]) out.address = s["contact.address"];
   if (s["company.legalName"]) out.legalName = s["company.legalName"];

@@ -154,12 +154,27 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 - ⚠️ Unverified in a browser: the CSP has no `script-src`, so pages should be unaffected, but check the console once
 - ❌ Strict nonce-based `script-src` (needs browser testing) and CAPTCHA (needs Turnstile keys) still pending
 
+## Approvals separation of duties
+- ✅ Requester cannot decide own request (403 `own_request`); opt-out env `COUNCIL_ALLOW_SELF_APPROVAL=1`; DB-tested and service-tested
+- ⚠️ With the default, a solo owner who is the only approver cannot approve their own test requests: set the opt-out or add a second admin
+
+## Contact details
+- ✅ General email, careers/HR email, phone, address, LinkedIn and X come from site settings; shown on the Contact page and footer; `settings:set` command saves them (audited)
+- ⏳ Phone, LinkedIn, address: not yet provided
+- ⏳ Email sending: needs Resend domain verification and API key
+
 ## Documentation
 - ✅ ARCHITECTURE, AGENTS, API, SECURITY, TESTING, DEPLOYMENT written from the code
 - ⚠️ DEPLOYMENT has not been rehearsed on a hosting platform
 
+## Newsletter, SEO and error pages
+- ✅ Newsletter signup (footer): double opt-in, hashed tokens, 7-day confirm window, confirm and unsubscribe need a button press, same reply for known and unknown addresses, rate limits per IP and per email, honeypot; unit-tested and DB-tested
+- ⚠️ Delivery depends on Resend (`RESEND_API_KEY`, `MAIL_FROM`); in development the emails print in the server console
+- ✅ `/sitemap.xml`, `/robots.txt` (private areas excluded; tested), custom 404 and error pages
+- ❌ No admin screen for subscribers yet, and no way to send a newsletter from the site
+
 ## Not built ❌
-Remaining public routes: /insights(+slug), /careers(+job) · careers application and newsletter forms · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
+Real AI providers and provider/agent admin screens (need API keys) · document upload and object storage · CAPTCHA (needs Turnstile keys) · strict nonce CSP · browser end-to-end and security suites · Council Meeting mode, comparison and memory · native PDF export · legal review · hosting rehearsal
 
 ## Findings needing attention
 * Model count is **55**, not ~60.

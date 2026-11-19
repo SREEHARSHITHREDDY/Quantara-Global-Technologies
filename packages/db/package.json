@@ -14,6 +14,7 @@
     "migrate:deploy": "prisma migrate deploy",
     "seed": "tsx src/seed/run.ts",
     "staff:grant": "tsx scripts/grant-staff.ts",
+    "settings:set": "tsx scripts/settings-set.ts",
     "council:plan": "tsx scripts/council-plan.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
