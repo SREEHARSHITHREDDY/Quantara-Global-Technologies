@@ -20,6 +20,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let body: unknown; try { body = JSON.parse(text); } catch { return json({ error: { code: "invalid_json", message: "Send valid JSON." } }, 400); }
   const { id } = await params;
   const db = getPrisma();
-  const r = await decideApprovalRequest(caller, id, body, { decide: (a) => decideApproval(db, a) });
+  const r = await decideApprovalRequest(caller, id, body, { decide: (a) => decideApproval(db, { ...a, allowSelf: process.env.COUNCIL_ALLOW_SELF_APPROVAL === "1" }) });
   return r.ok ? json({ approval: r.approval }) : fail(r);
 }

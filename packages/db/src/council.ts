@@ -363,19 +363,22 @@ export async function listApprovals(db: PrismaClient, a: { organizationId: strin
   return rows.map(toView);
 }
 
-export type DecideResult = { ok: true; approval: ApprovalView } | { ok: false; reason: "not_found" | "already_decided" | "expired" };
+export type DecideResult = { ok: true; approval: ApprovalView } | { ok: false; reason: "not_found" | "already_decided" | "expired" | "own_request" };
 
 /** Decides a pending request exactly once. Two people deciding at the same moment: one wins, the other is told it was already decided. */
-export async function decideApproval(db: PrismaClient, a: { id: string; organizationId: string; deciderId: string; decision: "APPROVED" | "REJECTED"; note?: string; now?: Date }): Promise<DecideResult> {
+export async function decideApproval(db: PrismaClient, a: { id: string; organizationId: string; deciderId: string; decision: "APPROVED" | "REJECTED"; note?: string; now?: Date; allowSelf?: boolean }): Promise<DecideResult> {
   const now = a.now ?? new Date();
   return db.$transaction(async (tx: Pick<PrismaClient, "approvalRequest" | "auditLog">) => {
     const won = await tx.approvalRequest.updateMany({
-      where: { id: a.id, organizationId: a.organizationId, status: "PENDING", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      where: { id: a.id, organizationId: a.organizationId, status: "PENDING", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        // Separation of duties: the person who asked cannot decide their own request unless the workspace owner opted out.
+        ...(a.allowSelf ? {} : { AND: [{ OR: [{ requesterId: null }, { requesterId: { not: a.deciderId } }] }] }) },
       data: { status: a.decision, decidedById: a.deciderId, decidedAt: now, decisionNote: a.note ? clip(a.note, 1000) : null },
     });
     const row: ApprovalRow | null = await tx.approvalRequest.findFirst({ where: { id: a.id, organizationId: a.organizationId }, select: APPROVAL_SELECT });
     if (!row) return { ok: false as const, reason: "not_found" as const };
     if (won.count === 0) {
+      if (row.status === "PENDING" && !a.allowSelf && row.requesterId === a.deciderId && (!row.expiresAt || row.expiresAt > now)) return { ok: false as const, reason: "own_request" as const };
       if (row.status === "PENDING") { await tx.approvalRequest.updateMany({ where: { id: a.id, status: "PENDING" }, data: { status: "EXPIRED" } }); return { ok: false as const, reason: "expired" as const }; }
       return { ok: false as const, reason: row.status === "EXPIRED" ? ("expired" as const) : ("already_decided" as const) };
     }

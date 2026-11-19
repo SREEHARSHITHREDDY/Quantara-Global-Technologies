@@ -300,6 +300,15 @@ describe("approvals", () => {
     const audit = await db.auditLog.findFirstOrThrow({ where: { resourceId: a!.id, action: "council.approval.approved" } });
     expect(audit.actorId).toBe(boss.id);
   });
+  it("the person who asked cannot decide their own request; another approver can; the owner can opt out", async () => {
+    const { t } = await withApprovals();
+    const boss = await makeUser(); await makeMember(t.org.id, boss.id);
+    const [a, b] = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    expect(await decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: t.user.id, decision: "APPROVED" })).toMatchObject({ ok: false, reason: "own_request" });
+    expect((await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" })).find((x) => x.id === a!.id)?.status).toBe("PENDING");
+    expect(await decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: boss.id, decision: "APPROVED" })).toMatchObject({ ok: true });
+    expect(await decideApproval(db, { id: b!.id, organizationId: t.org.id, deciderId: t.user.id, decision: "APPROVED", allowSelf: true })).toMatchObject({ ok: true });
+  });
   it("a request can be decided once; a concurrent second decision loses", async () => {
     const { t } = await withApprovals();
     const x = await makeUser(); const y = await makeUser();

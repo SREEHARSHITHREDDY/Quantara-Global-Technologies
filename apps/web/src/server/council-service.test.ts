@@ -187,6 +187,10 @@ describe("approvals service", () => {
   const decideDeps = (r: DecideResult) => { const calls: unknown[] = []; return { calls, deps: { decide: async (a: unknown) => { calls.push(a); return r; } } }; };
   const boss = () => caller("admin");
 
+  it("a refusal because the decider is the requester becomes 403 own_request", async () => {
+    const { deps } = decideDeps({ ok: false, reason: "own_request" });
+    expect(await decideApprovalRequest(boss(), "a1", { decision: "APPROVED" }, deps)).toMatchObject({ ok: false, status: 403, code: "own_request" });
+  });
   it("only people with approval authority can decide, and nothing reaches the database otherwise", async () => {
     const { calls, deps } = decideDeps({ ok: true, approval: view("a1") });
     expect(await decideApprovalRequest(caller("council_user"), "a1", { decision: "APPROVED" }, deps)).toMatchObject({ ok: false, status: 403 });

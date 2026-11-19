@@ -166,6 +166,7 @@ export async function decideApprovalRequest(caller: Caller, id: string, raw: unk
   const r = await deps.decide({ id, organizationId: caller.organizationId, deciderId: caller.userId, decision: parsed.data.decision, note: parsed.data.note || undefined });
   if (r.ok) return r;
   if (r.reason === "not_found") return err(404, "not_found", "Approval request not found.");
+  if (r.reason === "own_request") return err(403, "own_request", "You cannot decide a request that came from your own consultation. Ask another approver.");
   if (r.reason === "expired") return err(410, "expired", "This request has expired and can no longer be decided.");
   return err(409, "already_decided", "Someone has already decided this request.");
 }

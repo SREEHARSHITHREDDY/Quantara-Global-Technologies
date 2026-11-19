@@ -11,6 +11,7 @@
 | CSRF | Same-origin check on every state-changing Council route |
 | Input | Zod validation, body size limits on API routes |
 | Streams | Cap of 5 per user; access re-checked every 30 s; fail closed |
+| Approvals | The person whose consultation raised a request cannot decide it (403 `own_request`). A workspace with a single approver can set `COUNCIL_ALLOW_SELF_APPROVAL=1` to opt out |
 | Audit | Immutable `AuditLog`; report exports, approvals and plan changes are recorded; export audit is written before content is returned |
 | Data retention | Agent events of finished consultations are purged after 90 days; reports are kept |
 | Headers | HSTS, nosniff, frame denial, referrer and permissions policies, and a baseline CSP (`frame-ancestors`, `object-src`, `base-uri`, `form-action`) |
@@ -20,7 +21,6 @@
 ## Not done yet
 * Strict nonce-based `script-src` CSP (needs browser testing).
 * CAPTCHA on public forms (needs Turnstile keys).
-* Separation of duties on approvals: the requester can currently approve their own request.
 * Provider key storage screens and encryption at rest for keys entered in the admin portal.
 * Independent penetration test and legal review.
 
