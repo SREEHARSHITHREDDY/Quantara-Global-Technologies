@@ -184,6 +184,11 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 - ✅ `/sitemap.xml`, `/robots.txt` (private areas excluded; tested), custom 404 and error pages
 - ❌ No admin screen for subscribers yet, and no way to send a newsletter from the site
 
+## Menu and motion layer
+- Left-hand burger menu (slide-out drawer, focus trap, Esc, scroll lock) and a more animated site: aurora hero, executive orbit, count-up stats, spotlight cards, marquee, scroll-driven timeline, scroll progress bar. Uses the `motion` package; honours reduced-motion.
+- Verified: typecheck, 144 web tests, production build; desktop and mobile rendered and viewed in a headless Chrome in the sandbox.
+- Unverified: real devices, Safari, and the owner's own browser.
+
 ## Not built ❌
 Real AI providers and provider/agent admin screens (need API keys) · document upload and object storage · CAPTCHA (needs Turnstile keys) · strict nonce CSP · browser end-to-end and security suites · Council Meeting mode, comparison and memory · native PDF export · legal review · hosting rehearsal
 

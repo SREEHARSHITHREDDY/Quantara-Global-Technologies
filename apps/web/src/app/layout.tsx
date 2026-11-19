@@ -3,6 +3,7 @@ import { company } from "@quantara/content";
 import { SITE_URL } from "@/lib/site";
 import { Footer } from "@/components/site/footer";
 import { Header } from "@/components/site/header";
+import { MotionProvider } from "@/components/motion/motion-provider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,9 +21,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" data-scroll-behavior="smooth">
       <body suppressHydrationWarning>
         <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-navy-900">Skip to content</a>
-        <Header />
-        <main id="main">{children}</main>
-        <Footer />
+        <noscript><style>{"[data-reveal]{opacity:1!important;transform:none!important}"}</style></noscript>
+        <MotionProvider>
+          <Header />
+          <main id="main">{children}</main>
+          <Footer />
+        </MotionProvider>
       </body>
     </html>
   );
