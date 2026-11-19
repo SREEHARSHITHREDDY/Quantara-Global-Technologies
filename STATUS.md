@@ -145,6 +145,15 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | Real Anthropic / OpenAI adapters, orchestrator, worker handler, SSE, screens, reports, approvals, documents, memory | ❌ not built (later stages) |
 | Provider keys | ⏳ awaiting credentials; everything runs as SIMULATED ANALYSIS until then |
 
+## Hardening pass
+- ✅ Per-user cap of 5 concurrent event streams (429 `too_many_streams`), unit-tested
+- ✅ Mid-stream access re-check every 30 s from the database; revoked or erroring checks end the stream (fail closed), unit-tested
+- ✅ Daily purge of agent events for finished executions older than 90 days (reports kept); DB-tested; scheduled in the worker
+- ✅ Baseline Content-Security-Policy (frame-ancestors, object-src, base-uri, form-action) plus existing headers, in `lib/security-headers.ts`, unit-tested
+- ✅ Route-boundary tests: 401 signed out on every council route; 403 on cross-site or origin-less POSTs; bad format / bad JSON / oversized body refused
+- ⚠️ Unverified in a browser: the CSP has no `script-src`, so pages should be unaffected, but check the console once
+- ❌ Strict nonce-based `script-src` (needs browser testing) and CAPTCHA (needs Turnstile keys) still pending
+
 ## Not built ❌
 Remaining public routes: /insights(+slug), /careers(+job) · careers application and newsletter forms · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
 

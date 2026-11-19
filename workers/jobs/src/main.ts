@@ -1,7 +1,7 @@
 // Worker entrypoint. Deploy as its own long-running process (NOT a serverless function).
 import "./env";
 import { FREE_RATE, MOCK_SCENARIOS, MockProvider, type MockScenario } from "@quantara/council";
-import { createExecutionStore, createPrisma, failExecution, failStaleExecutions } from "@quantara/db";
+import { createExecutionStore, createPrisma, failExecution, failStaleExecutions, purgeOldEvents } from "@quantara/db";
 import { createCouncilHandler } from "./handlers/council-execute";
 import { startWorker } from "./worker";
 
@@ -31,6 +31,9 @@ const worker = await startWorker({
 // Safety net: end executions whose worker died or whose job expired, so their budget reservation is released.
 const sweeper = setInterval(() => { failStaleExecutions(db).then((r) => { if (r.timedOut || r.failed) console.log(JSON.stringify({ level: "info", msg: "stale executions ended", ...r })); }).catch((e) => console.error("stale sweep failed", e)); }, 5 * 60_000);
 sweeper.unref();
-const shutdown = async (sig: string) => { console.log(`${sig}: draining`); clearInterval(sweeper); await worker.stop(); await db.$disconnect(); process.exit(0); };
+// Daily: drop live-progress events of executions that finished long ago. Reports and the audit log are kept.
+const purger = setInterval(() => { purgeOldEvents(db).then((r) => { if (r.deleted) console.log(JSON.stringify({ level: "info", msg: "old events purged", ...r })); }).catch((e) => console.error("event purge failed", e)); }, 24 * 60 * 60_000);
+purger.unref();
+const shutdown = async (sig: string) => { console.log(`${sig}: draining`); clearInterval(sweeper); clearInterval(purger); await worker.stop(); await db.$disconnect(); process.exit(0); };
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, createApprovalRequests, getCouncilDashboard, listApprovals, decideApproval, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, createApprovalRequests, getCouncilDashboard, purgeOldEvents, listApprovals, decideApproval, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -362,5 +362,29 @@ describe("council dashboard", () => {
     await reserve(b);
     const d = await getCouncilDashboard(db, { organizationId: a.org.id, userId: a.user.id, scope: "org" });
     expect(d).toMatchObject({ totalSessions: 0, activeRuns: 0, completedReports: 0, pendingApprovals: 0, recentActivity: [] });
+  });
+});
+
+describe("event retention", () => {
+  it("purges events of long-finished executions only, and keeps the report", async () => {
+    const t = await tenant();
+    const old = await reserve(t); const recent = await reserve(t); const running = await reserve(t);
+    if (!old.ok || !recent.ok || !running.ok) throw new Error("reserve");
+    const store = createExecutionStore(db, t.org.id);
+    for (const r of [old, recent, running]) await store.appendEvent(r.executionId, "state.changed", undefined, { state: "ASSESSING" });
+    const day = 86_400_000;
+    await db.execution.update({ where: { id: old.executionId }, data: { status: "SUCCEEDED", finishedAt: new Date(Date.now() - 100 * day) } });
+    await db.execution.update({ where: { id: recent.executionId }, data: { status: "SUCCEEDED", finishedAt: new Date(Date.now() - 10 * day) } });
+    await db.execution.update({ where: { id: running.executionId }, data: { startedAt: new Date(Date.now() - 200 * day) } });
+    await db.report.create({ data: { organizationId: t.org.id, userId: t.user.id, executionId: old.executionId, title: "kept", status: "READY", sections: {} } });
+    const r = await purgeOldEvents(db);
+    expect(r.deleted).toBeGreaterThanOrEqual(1);
+    expect(await db.agentEvent.count({ where: { executionId: old.executionId } })).toBe(0);
+    expect(await db.agentEvent.count({ where: { executionId: recent.executionId } })).toBe(1);
+    expect(await db.agentEvent.count({ where: { executionId: running.executionId } })).toBe(1);
+    expect(await db.report.count({ where: { executionId: old.executionId } })).toBe(1);
+  });
+  it("refuses a nonsensical retention period", async () => {
+    await expect(purgeOldEvents(db, { olderThanDays: 0 })).rejects.toThrow();
   });
 });

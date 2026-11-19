@@ -426,3 +426,19 @@ export async function getCouncilDashboard(db: PrismaClient, a: { organizationId:
     recentActivity: activity,
   };
 }
+
+
+// ---- Retention -------------------------------------------------------------------------------------------
+
+export const EVENT_RETENTION_DAYS = 90;
+/**
+ * Deletes progress events of executions that finished more than `olderThanDays` ago. The report, usage records and audit log are kept:
+ * events are only the live-progress feed and are not needed once the result exists. Running executions are never touched.
+ */
+export async function purgeOldEvents(db: PrismaClient, a: { olderThanDays?: number; now?: Date } = {}): Promise<{ deleted: number }> {
+  const days = a.olderThanDays ?? EVENT_RETENTION_DAYS;
+  if (!Number.isFinite(days) || days < 1) throw new Error("olderThanDays must be at least 1");
+  const cutoff = new Date((a.now ?? new Date()).getTime() - days * 86_400_000);
+  const r = await db.agentEvent.deleteMany({ where: { execution: { status: { in: TERMINAL }, finishedAt: { lt: cutoff } } } });
+  return { deleted: r.count };
+}

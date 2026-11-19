@@ -22,6 +22,8 @@ export interface StreamOptions {
   pollMs?: number; heartbeatMs?: number; maxMs?: number;
   /** After the execution ends, wait this long and read once more, because the last event is written just after the status changes. */
   endGraceMs?: number;
+  /** Called every `recheckMs`; when it returns false the stream ends, so access removed mid-stream stops delivering events. */
+  recheckAccess?: () => Promise<boolean>; recheckMs?: number;
   now?: () => number; sleep?: (ms: number) => Promise<void>;
 }
 
@@ -34,10 +36,17 @@ export async function* streamExecution(src: EventSource, o: StreamOptions): Asyn
   const now = o.now ?? Date.now;
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const started = now();
-  let seq = o.afterSeq, lastWrite = now();
+  const recheckEvery = o.recheckMs ?? 30_000;
+  let seq = o.afterSeq, lastWrite = now(), lastCheck = now();
   yield encodeComment("connected");
   for (;;) {
     if (o.signal?.aborted) return;
+    if (o.recheckAccess && now() - lastCheck >= recheckEvery) {
+      lastCheck = now();
+      let allowed = false;
+      try { allowed = await o.recheckAccess(); } catch { allowed = false; }   // fail closed
+      if (!allowed) { yield `event: end\ndata: ${JSON.stringify({ reason: "access_revoked" })}\n\n`; return; }
+    }
     const status = await src.status();
     if (status === null) { yield `event: end\ndata: ${JSON.stringify({ reason: "not_found" })}\n\n`; return; }
     let rows = await src.events(seq);

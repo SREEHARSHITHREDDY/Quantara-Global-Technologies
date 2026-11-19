@@ -87,3 +87,28 @@ describe("streamExecution", () => {
     expect(frames.at(-1)).toContain("max_duration");
   });
 });
+
+describe("streamExecution access re-check", () => {
+  const clock = () => { let t = 0; return { now: () => t, sleep: async (ms: number) => { t += ms; } }; };
+  const idle: EventSource = { status: async () => "ASSESSING", events: async () => [] };
+
+  it("ends with access_revoked once the re-check says no, and sends nothing further", async () => {
+    const c = clock(); let allowed = true;
+    const frames: string[] = [];
+    let calls = 0;
+    for await (const f of streamExecution(idle, { afterSeq: 0, pollMs: 1000, recheckMs: 5000, recheckAccess: async () => { calls++; if (calls >= 2) allowed = false; return allowed; }, now: c.now, sleep: c.sleep, maxMs: 10 * 60_000 })) frames.push(f);
+    expect(frames.at(-1)).toContain('"reason":"access_revoked"');
+    expect(calls).toBe(2);
+  });
+  it("fails closed when the re-check throws", async () => {
+    const c = clock(); const frames: string[] = [];
+    for await (const f of streamExecution(idle, { afterSeq: 0, pollMs: 1000, recheckMs: 3000, recheckAccess: async () => { throw new Error("db down"); }, now: c.now, sleep: c.sleep, maxMs: 60_000 })) frames.push(f);
+    expect(frames.at(-1)).toContain("access_revoked");
+  });
+  it("keeps streaming while the re-check keeps saying yes", async () => {
+    const c = clock(); const frames: string[] = []; let checks = 0;
+    for await (const f of streamExecution(idle, { afterSeq: 0, pollMs: 1000, recheckMs: 2000, recheckAccess: async () => { checks++; return true; }, now: c.now, sleep: c.sleep, maxMs: 20_000 })) frames.push(f);
+    expect(frames.at(-1)).toContain("max_duration");
+    expect(checks).toBeGreaterThan(3);
+  });
+});
