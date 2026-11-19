@@ -21,3 +21,4 @@ const g = globalThis as unknown as { __quantaraPrisma?: PrismaClient };
 export function getPrisma(): PrismaClient {
   return (g.__quantaraPrisma ??= createPrisma());
 }
+export * from "./council-admin";

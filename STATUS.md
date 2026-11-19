@@ -126,6 +126,13 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | `/executives` (4 groups, 10 cards) and `/executives/[code]` (focus, questions asked, what you receive, peers); homepage council section rebuilt as a product strip; footer link | ⚠️ builds, typechecks, 2 unit tests + route tests pass in sandbox; **not viewed in a browser** |
 | Content comes from the council package definitions; taglines are our own wording. A visible notice says assessments are simulated until a live provider is connected | ✅ by construction |
 
+## Council admin portal (staff)
+| Item | State |
+|---|---|
+| `/admin/council`: platform usage this month, customer workspaces with plan and usage, search; `/admin/council/[orgId]`: change plan (Disabled, Trial with days, Standard, Enterprise; concurrency override), recent sessions (operational data only, no prompts or results); `/admin/council/audit`: council audit log with workspace filter | ⚠️ builds, typechecks; 3 validation unit tests pass in sandbox; 4 database tests written, unrun; **never viewed in a browser** |
+| Permissions: view needs `ai:usage:read`, plan changes need `ai:provider:manage` (re-checked on every submit and audited as `council.plan.set`), audit log needs `audit:read`; staff organizations are never listed | ⚠️ as above |
+| Not yet: provider credential management, agent configuration screens, org-level provider restrictions (need real adapters first) | ❌ |
+
 ## Header and staff access
 | Item | State |
 |---|---|
