@@ -1,0 +1,56 @@
+# Deployment guide
+
+Status: this describes what the code needs. It has **not** been rehearsed on a hosting platform. Treat the first deployment as a staging run.
+
+## Requirements
+Node 22.12+, pnpm 10, PostgreSQL 15 or 16 (tested on 15), HTTPS in front of the web app, one long-running process each for web and worker.
+
+## Environment variables
+| Variable | Required | Purpose |
+|---|---|---|
+| `DATABASE_URL` | yes (web, worker, scripts) | PostgreSQL connection string |
+| `BETTER_AUTH_SECRET` | yes | `openssl rand -base64 32` |
+| `BETTER_AUTH_URL` | yes | Public site URL, for example `https://www.example.com` |
+| `NEXT_PUBLIC_SITE_URL` | yes | Same public URL |
+| `APP_IP_HASH_SALT` | yes in production | `openssl rand -hex 32`; hashes visitor IPs for abuse limiting |
+| `RESUME_STORAGE_DIR` | yes in production | Private, persistent directory not served by the site |
+| `MAIL_FROM`, `RESEND_API_KEY` | for email | Verification and reset emails; domain must be verified in Resend. Without them no email is sent. |
+| `COUNCIL_ENABLE_MOCK` | demos only | Set to `1` to allow the Mock provider in production |
+| `COUNCIL_MOCK_SCENARIO` | optional | Worker scenario; blank means success |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `S3_*`, `TURNSTILE_SECRET_KEY`, `SENTRY_DSN`, `APP_ENCRYPTION_KEY` | not used yet | Reserved for features not built |
+
+See `.env.example`. Never commit `.env`.
+
+## Steps
+```
+pnpm install --frozen-lockfile
+pnpm db:migrate                 # applies migrations (prisma migrate deploy)
+pnpm db:seed                    # roles, services, industries, statistics, disabled integrations
+pnpm --filter @quantara/web build
+pnpm --filter @quantara/web start      # process 1: web (set PORT as needed)
+pnpm --filter @quantara/worker start   # process 2: worker (must share DATABASE_URL)
+```
+The worker must run, or consultations stay queued. Run both under a process supervisor so they restart on failure.
+
+## First-time setup
+1. Create your account on the site and verify the email.
+2. Make yourself staff: `pnpm --filter @quantara/db staff:grant -- you@example.com super_admin`.
+3. Sign in at `/staff`, then open `/admin`.
+4. Enable the Council for a customer workspace: `pnpm --filter @quantara/db council:plan -- customer@example.com TRIAL 14`.
+5. Enter real contact details in admin Settings.
+
+## Health and monitoring
+`GET /api/health` is a liveness check only. Monitor the worker process separately and watch the database for queued consultations that do not progress.
+
+## Backups and recovery
+Back up PostgreSQL on a schedule and test a restore. `AuditLog` rows cannot be deleted by the application; any retention purge needs a DBA procedure.
+
+## Launch checklist
+- [ ] Staging run completed with HTTPS and both processes
+- [ ] Check chain green against the production PostgreSQL major version
+- [ ] Secrets generated and stored outside git
+- [ ] Email domain verified; a real verification email received
+- [ ] Contact details, legal pages and registration details reviewed by counsel
+- [ ] Pages reviewed in a browser at desktop and mobile widths
+- [ ] Mock provider labelled "simulated" confirmed on screen, or real provider adapters built and keys added
+- [ ] Backup and restore tested

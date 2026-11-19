@@ -10,7 +10,7 @@ Corporate website, Executive AI Council and admin portal for Quantara Technologi
 | `packages/auth` | Better Auth configuration (verification, reset, MFA, orgs, invitations, bans) |
 | `packages/db` | Prisma schema, SQL supplement, seed, DB integration tests |
 | `workers/jobs` | Separately deployable pg-boss worker (long-running AI/doc/email jobs) |
-| `docs/` | `LOCAL_DATABASE_SETUP.md`, `DATABASE.md` |
+| `docs/` | `ARCHITECTURE.md`, `AGENTS.md`, `API.md`, `SECURITY.md`, `TESTING.md`, `DEPLOYMENT.md`, `DATABASE.md`, `LOCAL_DATABASE_SETUP.md`, `COUNCIL_DESIGN.md` |
 
 **Read `STATUS.md` first**: it states exactly what is verified, unverified, mocked or not built.
 

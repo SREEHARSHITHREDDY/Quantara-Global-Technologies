@@ -154,6 +154,10 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 - ⚠️ Unverified in a browser: the CSP has no `script-src`, so pages should be unaffected, but check the console once
 - ❌ Strict nonce-based `script-src` (needs browser testing) and CAPTCHA (needs Turnstile keys) still pending
 
+## Documentation
+- ✅ ARCHITECTURE, AGENTS, API, SECURITY, TESTING, DEPLOYMENT written from the code
+- ⚠️ DEPLOYMENT has not been rehearsed on a hosting platform
+
 ## Not built ❌
 Remaining public routes: /insights(+slug), /careers(+job) · careers application and newsletter forms · admin portal · Council agents, orchestration, SSE, reports, document processing · AI provider integration ⏳ · object storage ⏳ · CSP · e2e/security test suites · docs: DEPLOYMENT, ARCHITECTURE, SECURITY, API_DOCUMENTATION, TESTING, AGENTS.
 
