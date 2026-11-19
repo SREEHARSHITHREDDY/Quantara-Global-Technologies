@@ -116,7 +116,8 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | 20-section report builder (`buildReport`; sections with no covering executive say "Not assessed"; nothing invented; no roadmap or sustainability content is produced by the current analysis) | ⚠️ 4 unit tests pass in sandbox |
 | Export as Markdown or printable HTML (needs `council:report:export`, audited before content is returned, fails closed if the audit write fails, HTML escaped, sandboxed response headers) | ⚠️ 6 unit tests pass in sandbox; route never run in a browser |
 | Access audit: exports always, and views by anyone other than the owner (`council.report.viewed` / `.exported`) | ⚠️ 1 database test written, unrun |
-| Not yet: approvals actions, PDF export | ❌ |
+| Approvals: a finished consultation creates an approval request per action the executives flagged (keyword-classified into the 8 specified categories, 30-day expiry, idempotent); people with `council:approval:decide` approve or reject once with a note (required on rejection); concurrent decisions: one wins; expired requests cannot be approved; every decision audited; others see only their own consultations' requests; approving records a decision only and executes nothing | ⚠️ 10 council + 6 service unit tests pass in sandbox; 6 database tests written, unrun; pages never viewed in a browser |
+| Not yet: native PDF export; separation-of-duties rule (requester may currently approve their own request); database CHECK that a decided request has a decider | ❌ |
 
 ## Executive team pages (public)
 | Item | State |

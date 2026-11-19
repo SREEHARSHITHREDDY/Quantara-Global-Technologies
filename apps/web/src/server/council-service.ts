@@ -1,9 +1,9 @@
 import { z } from "zod";
 import {
-  CONSULTATION_MODES, PROVIDER_IDS, councilAccess, estimateExecution, resolveProvider, selectParticipants,
+  CONSULTATION_MODES, MAX_DECISION_NOTE, PROVIDER_IDS, councilAccess, estimateExecution, resolveProvider, selectParticipants,
   type ConsultationMode, type ProviderId, type Rate,
 } from "@quantara/council";
-import type { CouncilOrgAccess, ExecutionView, ReserveInput, ReserveResult } from "@quantara/db";
+import type { ApprovalView, CouncilOrgAccess, DecideResult, ExecutionView, ReserveInput, ReserveResult } from "@quantara/db";
 import { buildReport, parseConsolidated, reportToHtml, reportToMarkdown } from "@quantara/council";
 import { can, canReadCouncilRecord, type MembershipContext } from "@quantara/rbac";
 
@@ -142,4 +142,30 @@ export async function exportConsultation(
   return format === "md"
     ? { ok: true, filename: `${base}.md`, contentType: "text/markdown; charset=utf-8", body: reportToMarkdown(report, consolidated) }
     : { ok: true, filename: `${base}.html`, contentType: "text/html; charset=utf-8", body: reportToHtml(report, consolidated) };
+}
+
+// ---- Approvals -----------------------------------------------------------------------------------------
+
+const decisionSchema = z.object({
+  decision: z.enum(["APPROVED", "REJECTED"]),
+  note: z.string().trim().max(MAX_DECISION_NOTE).optional(),
+}).strict().refine((d) => d.decision !== "REJECTED" || (d.note?.length ?? 0) >= 3, { message: "Say why you are rejecting this request.", path: ["note"] });
+
+/** People who can decide see the whole organization's requests; everyone else sees requests from their own consultations. */
+export async function listApprovalsFor(caller: Caller, deps: { list(a: { organizationId: string; userId: string; scope: "own" | "org" }): Promise<ApprovalView[]> }): Promise<{ ok: true; canDecide: boolean; approvals: ApprovalView[] } | ServiceError> {
+  const canDecide = can(caller.ctx, "council:approval:decide");
+  if (!canDecide && !can(caller.ctx, "council:use")) return err(403, "forbidden", "You do not have access to approvals.");
+  const approvals = await deps.list({ organizationId: caller.organizationId, userId: caller.userId, scope: canDecide ? "org" : "own" });
+  return { ok: true, canDecide, approvals };
+}
+
+export async function decideApprovalRequest(caller: Caller, id: string, raw: unknown, deps: { decide(a: { id: string; organizationId: string; deciderId: string; decision: "APPROVED" | "REJECTED"; note?: string }): Promise<DecideResult> }): Promise<{ ok: true; approval: ApprovalView } | ServiceError> {
+  if (!can(caller.ctx, "council:approval:decide")) return err(403, "forbidden", "You do not have authority to decide approvals.");
+  const parsed = decisionSchema.safeParse(raw);
+  if (!parsed.success) return err(400, "invalid_request", parsed.error.issues[0]?.message ?? "Invalid request.", parsed.error.flatten().fieldErrors as Record<string, string[] | undefined>);
+  const r = await deps.decide({ id, organizationId: caller.organizationId, deciderId: caller.userId, decision: parsed.data.decision, note: parsed.data.note || undefined });
+  if (r.ok) return r;
+  if (r.reason === "not_found") return err(404, "not_found", "Approval request not found.");
+  if (r.reason === "expired") return err(410, "expired", "This request has expired and can no longer be decided.");
+  return err(409, "already_decided", "Someone has already decided this request.");
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MockProvider, runExecution, type AgentCode, type MockScenario } from "@quantara/council";
-import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
+import { createExecutionStore, failExecution, failStaleExecutions, findCustomerOrgByEmail, getCouncilOrgAccess, getExecutionResult, getExecutionView, listExecutionEvents, listExecutionsForUser, recordReportAccess, createApprovalRequests, listApprovals, decideApproval, requestCancel, reserveExecution, setCouncilPlan } from "../src/council";
 import { db, makeMember, makeOrg, makeUser } from "./helpers";
 
 const ALL = [...AGENT_CODES] as AgentCode[];
@@ -268,5 +268,72 @@ describe("report access audit", () => {
     expect(row.organizationId).toBe(t.org.id);
     expect(row.actorId).toBe(t.user.id);
     expect(row.metadata).toMatchObject({ format: "md", ownerId: t.user.id });
+  });
+});
+
+describe("approvals", () => {
+  const asks = [{ agent: "CFO", action: "Transfer AED 2M to the new entity", reason: "Funds the setup" }, { agent: "CLO", action: "Sign the lease", reason: "Binding" }];
+  async function withApprovals() {
+    const t = await tenant(); const r = await reserve(t); if (!r.ok) throw new Error("reserve");
+    await createApprovalRequests(db, { organizationId: t.org.id, executionId: r.executionId, requesterId: t.user.id, approvals: asks });
+    return { t, executionId: r.executionId };
+  }
+  it("creates requests with a category and expiry, and never duplicates them", async () => {
+    const { t, executionId } = await withApprovals();
+    expect(await createApprovalRequests(db, { organizationId: t.org.id, executionId, requesterId: t.user.id, approvals: asks })).toBe(0);
+    const list = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "own" });
+    expect(list).toHaveLength(2);
+    expect(list.map((x) => x.category).sort()).toEqual(["CONTRACT_SIGNING", "FINANCIAL_TRANSFER"]);
+    expect(list.every((x) => x.status === "PENDING" && x.expiresAt && x.expiresAt > new Date())).toBe(true);
+  });
+  it("approve and reject record who decided, when, and why, and write the audit log", async () => {
+    const { t } = await withApprovals();
+    const boss = await makeUser(); await makeMember(t.org.id, boss.id);
+    const [a, b] = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    const ok = await decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: boss.id, decision: "APPROVED", note: "Budget confirmed" });
+    expect(ok.ok && ok.approval.status).toBe("APPROVED");
+    const rej = await decideApproval(db, { id: b!.id, organizationId: t.org.id, deciderId: boss.id, decision: "REJECTED", note: "Not now" });
+    expect(rej.ok).toBe(true);
+    const row = await db.approvalRequest.findUniqueOrThrow({ where: { id: a!.id } });
+    expect(row).toMatchObject({ status: "APPROVED", decidedById: boss.id, decisionNote: "Budget confirmed" });
+    expect(row.decidedAt).toBeInstanceOf(Date);
+    const audit = await db.auditLog.findFirstOrThrow({ where: { resourceId: a!.id, action: "council.approval.approved" } });
+    expect(audit.actorId).toBe(boss.id);
+  });
+  it("a request can be decided once; a concurrent second decision loses", async () => {
+    const { t } = await withApprovals();
+    const x = await makeUser(); const y = await makeUser();
+    const [a] = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    const results = await Promise.all([
+      decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: x.id, decision: "APPROVED" }),
+      decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: y.id, decision: "REJECTED" }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.find((r) => !r.ok)).toMatchObject({ reason: "already_decided" });
+    expect(await db.auditLog.count({ where: { resourceId: a!.id, action: { startsWith: "council.approval." } } })).toBe(1);
+  });
+  it("another organization cannot decide or even find the request", async () => {
+    const { t } = await withApprovals();
+    const other = await tenant();
+    const [a] = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    expect(await decideApproval(db, { id: a!.id, organizationId: other.org.id, deciderId: other.user.id, decision: "APPROVED" })).toEqual({ ok: false, reason: "not_found" });
+    expect((await db.approvalRequest.findUniqueOrThrow({ where: { id: a!.id } })).status).toBe("PENDING");
+    expect(await listApprovals(db, { organizationId: other.org.id, userId: other.user.id, scope: "org" })).toHaveLength(0);
+  });
+  it("expired requests cannot be approved and are reported as expired", async () => {
+    const { t } = await withApprovals();
+    const [a] = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "org" });
+    const future = new Date(Date.now() + 31 * 86_400_000);
+    expect(await decideApproval(db, { id: a!.id, organizationId: t.org.id, deciderId: t.user.id, decision: "APPROVED", now: future })).toEqual({ ok: false, reason: "expired" });
+    expect((await db.approvalRequest.findUniqueOrThrow({ where: { id: a!.id } })).status).toBe("EXPIRED");
+  });
+  it("a finished consultation creates its approval requests automatically", async () => {
+    const t = await tenant(); const r = await reserve(t); if (!r.ok) throw new Error("reserve");
+    const store = createExecutionStore(db, t.org.id);
+    await store.saveResult(r.executionId, { simulated: true, label: "SIMULATED ANALYSIS", consensus: true, headline: "h", overallConfidence: 0.5, agents: [], disagreements: [], missingInformation: [], assumptions: [], risks: [], approvalsRequired: [{ agent: "CEO", action: "Announce to partners", reason: "External" }], claims: [], failedAgents: [], skippedAgents: [], caveats: [] });
+    await store.saveResult(r.executionId, { simulated: true, label: "SIMULATED ANALYSIS", consensus: true, headline: "h", overallConfidence: 0.5, agents: [], disagreements: [], missingInformation: [], assumptions: [], risks: [], approvalsRequired: [{ agent: "CEO", action: "Announce to partners", reason: "External" }], claims: [], failedAgents: [], skippedAgents: [], caveats: [] });
+    const list = await listApprovals(db, { organizationId: t.org.id, userId: t.user.id, scope: "own" });
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ category: "EXTERNAL_ACTION", agent: "CEO" });
   });
 });

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AGENT_CODES, FREE_RATE, MemoryStore, MockProvider, runExecution, type AgentCode, type ProviderId } from "@quantara/council";
-import type { ExecutionView, ReserveInput } from "@quantara/db";
+import type { ApprovalView, DecideResult, ExecutionView, ReserveInput } from "@quantara/db";
 import type { MembershipContext } from "@quantara/rbac";
-import { cancelConsultation, exportConsultation, readConsultation, startConsultation, type Caller, type StartDeps } from "./council-service";
+import { cancelConsultation, decideApprovalRequest, exportConsultation, listApprovalsFor, readConsultation, startConsultation, type Caller, type StartDeps } from "./council-service";
 
 const NOW = new Date("2026-11-18T10:00:00Z");
 const ctx = (role = "council_user"): MembershipContext => ({ role, orgType: "CLIENT", orgStatus: "ACTIVE", userBanned: false });
@@ -179,5 +179,47 @@ describe("exportConsultation", () => {
     const { deps, view } = await fixture();
     expect(await exportConsultation(caller(), "x", "md", { ...deps, getView: async () => ({ ...view, reportReady: false }) })).toMatchObject({ ok: false, status: 404 });
     expect(await exportConsultation(caller(), "x", "md", { ...deps, getResult: async () => ({ junk: true }) })).toMatchObject({ ok: false, status: 422 });
+  });
+});
+
+describe("approvals service", () => {
+  const view = (id: string): ApprovalView => ({ id, executionId: "e1", agent: "CFO", category: "PAYMENT", title: "Pay", description: "d", status: "APPROVED", requesterId: "u9", decidedById: "u1", decidedAt: new Date(), decisionNote: null, expiresAt: null, createdAt: new Date() });
+  const decideDeps = (r: DecideResult) => { const calls: unknown[] = []; return { calls, deps: { decide: async (a: unknown) => { calls.push(a); return r; } } }; };
+  const boss = () => caller("admin");
+
+  it("only people with approval authority can decide, and nothing reaches the database otherwise", async () => {
+    const { calls, deps } = decideDeps({ ok: true, approval: view("a1") });
+    expect(await decideApprovalRequest(caller("council_user"), "a1", { decision: "APPROVED" }, deps)).toMatchObject({ ok: false, status: 403 });
+    expect(calls).toHaveLength(0);
+  });
+  it("approves with the caller's own identity and organization, never ids from the body", async () => {
+    const { calls, deps } = decideDeps({ ok: true, approval: view("a1") });
+    const r = await decideApprovalRequest(boss(), "a1", { decision: "APPROVED", note: " ok " }, deps);
+    expect(r.ok).toBe(true);
+    expect(calls[0]).toEqual({ id: "a1", organizationId: "o1", deciderId: "u1", decision: "APPROVED", note: "ok" });
+  });
+  it("rejects unknown fields and bad decisions", async () => {
+    const { calls, deps } = decideDeps({ ok: true, approval: view("a1") });
+    expect(await decideApprovalRequest(boss(), "a1", { decision: "APPROVED", deciderId: "evil" }, deps)).toMatchObject({ ok: false, status: 400 });
+    expect(await decideApprovalRequest(boss(), "a1", { decision: "MAYBE" }, deps)).toMatchObject({ ok: false, status: 400 });
+    expect(calls).toHaveLength(0);
+  });
+  it("a rejection must carry a reason", async () => {
+    const { deps } = decideDeps({ ok: true, approval: view("a1") });
+    const r = await decideApprovalRequest(boss(), "a1", { decision: "REJECTED" }, deps);
+    expect(r).toMatchObject({ ok: false, status: 400, fieldErrors: { note: ["Say why you are rejecting this request."] } });
+  });
+  it("maps outcomes to 404, 409 and 410", async () => {
+    expect(await decideApprovalRequest(boss(), "a", { decision: "APPROVED" }, decideDeps({ ok: false, reason: "not_found" }).deps)).toMatchObject({ status: 404 });
+    expect(await decideApprovalRequest(boss(), "a", { decision: "APPROVED" }, decideDeps({ ok: false, reason: "already_decided" }).deps)).toMatchObject({ status: 409 });
+    expect(await decideApprovalRequest(boss(), "a", { decision: "APPROVED" }, decideDeps({ ok: false, reason: "expired" }).deps)).toMatchObject({ status: 410 });
+  });
+  it("deciders list the whole organization; ordinary users list only their own", async () => {
+    const scopes: string[] = [];
+    const deps = { list: async (a: { scope: string }) => { scopes.push(a.scope); return []; } };
+    expect(await listApprovalsFor(boss(), deps)).toMatchObject({ ok: true, canDecide: true });
+    expect(await listApprovalsFor(caller("council_user"), deps)).toMatchObject({ ok: true, canDecide: false });
+    expect(scopes).toEqual(["org", "own"]);
+    expect(await listApprovalsFor(caller("bd_manager"), deps)).toMatchObject({ ok: false, status: 403 });
   });
 });

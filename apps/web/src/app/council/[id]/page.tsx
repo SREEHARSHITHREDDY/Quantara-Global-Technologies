@@ -40,6 +40,7 @@ export default async function ConsultationPage({ params }: { params: Promise<{ i
           <p><Link href="/council" className="text-sm font-medium text-electric-600 underline">Back to the council</Link></p>
           {!done && <Card><LiveProgress executionId={view.id} initialParticipants={view.participants} /></Card>}
           {done && result != null && <ResultView result={result} />}
+          {consolidated && consolidated.approvalsRequired.length > 0 && <Card><p className="text-sm text-slate-700">{consolidated.approvalsRequired.length} action(s) from this consultation need a human decision. <Link className="font-medium text-electric-600 underline" href="/council/approvals">Open approvals</Link></p></Card>}
           {report && <ReportSections report={report} canExport={can(caller.ctx, "council:report:export")} executionId={view.id} />}
           {done && result == null && (
             <Card>

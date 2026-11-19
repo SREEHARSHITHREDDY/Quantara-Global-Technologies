@@ -1,5 +1,5 @@
 import {
-  DEFAULT_MONTHLY_BUDGET, EXECUTION_STATES, TERMINAL_STATES, assertTransition, assessmentSchema,
+  APPROVAL_TTL_DAYS, DEFAULT_MONTHLY_BUDGET, EXECUTION_STATES, classifyApproval, TERMINAL_STATES, assertTransition, assessmentSchema,
   type ConsolidatedResult, type Disagreement, type ExecutionRecord, type ExecutionState, type ExecutionStore, type TaskRecord,
 } from "@quantara/council";
 import type { PrismaClient } from "./generated/client";
@@ -208,6 +208,7 @@ export function createExecutionStore(db: PrismaClient, organizationId: string): 
       const e = await owned(id);
       const data = { title: `Consultation: ${clip(e.prompt, 80)}`, status: "READY" as const, sections: json(r), confidenceLevel: String(r.overallConfidence) };
       await db.report.upsert({ where: { executionId: id }, create: { organizationId, userId: e.userId, executionId: id, ...data }, update: data });
+      await createApprovalRequests(db, { organizationId, executionId: id, requesterId: e.userId, approvals: r.approvalsRequired });
     },
   };
 }
@@ -312,4 +313,73 @@ export type ReportAccessAction = "council.report.viewed" | "council.report.expor
 /** Who looked at or exported a report. Written to the append-only audit log. */
 export async function recordReportAccess(db: PrismaClient, a: { organizationId: string; actorId: string; executionId: string; action: ReportAccessAction; format?: string; ownerId: string }): Promise<void> {
   await db.auditLog.create({ data: { organizationId: a.organizationId, actorId: a.actorId, action: a.action, resourceType: "execution", resourceId: a.executionId, metadata: { ownerId: a.ownerId, ...(a.format ? { format: a.format } : {}) } } });
+}
+
+
+// ---- Human approvals -------------------------------------------------------------------------------------
+// Agents only prepare actions. A request here is a record awaiting a person; nothing is executed by approving it.
+
+export type ApprovalStatusId = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+export interface ApprovalView {
+  id: string; executionId: string | null; agent: string | null; category: string; title: string; description: string;
+  status: ApprovalStatusId; requesterId: string | null; decidedById: string | null; decidedAt: Date | null; decisionNote: string | null; expiresAt: Date | null; createdAt: Date;
+}
+const APPROVAL_SELECT = { id: true, executionId: true, requestedByAgentKey: true, category: true, title: true, description: true, status: true, requesterId: true, decidedById: true, decidedAt: true, decisionNote: true, expiresAt: true, createdAt: true } as const;
+type ApprovalRow = Omit<ApprovalView, "agent"> & { requestedByAgentKey: string | null };
+const toView = ({ requestedByAgentKey, ...r }: ApprovalRow): ApprovalView => ({ ...r, agent: requestedByAgentKey });
+
+/** Idempotent: re-saving a result never duplicates a request. */
+export async function createApprovalRequests(db: PrismaClient, a: { organizationId: string; executionId: string; requesterId: string; approvals: { agent: string; action: string; reason: string }[]; now?: Date }): Promise<number> {
+  if (!a.approvals.length) return 0;
+  const now = a.now ?? new Date();
+  const existing: { requestedByAgentKey: string | null; title: string }[] = await db.approvalRequest.findMany({ where: { executionId: a.executionId, organizationId: a.organizationId }, select: { requestedByAgentKey: true, title: true } });
+  const seen = new Set(existing.map((x) => `${x.requestedByAgentKey}|${x.title}`));
+  let created = 0;
+  for (const p of a.approvals) {
+    const title = clip(p.action, 200);
+    if (seen.has(`${p.agent}|${title}`)) continue;
+    seen.add(`${p.agent}|${title}`);
+    await db.approvalRequest.create({ data: {
+      organizationId: a.organizationId, executionId: a.executionId, requesterId: a.requesterId, requestedByAgentKey: p.agent,
+      category: classifyApproval(p.action), title, description: clip(p.reason, 1000), payload: { action: p.action, reason: p.reason },
+      expiresAt: new Date(now.getTime() + APPROVAL_TTL_DAYS * 86_400_000),
+    } });
+    created++;
+  }
+  return created;
+}
+
+async function expireStale(db: PrismaClient, organizationId: string, now: Date) {
+  await db.approvalRequest.updateMany({ where: { organizationId, status: "PENDING", expiresAt: { lt: now } }, data: { status: "EXPIRED" } });
+}
+
+/** `own` lists requests from the caller's consultations; `org` lists everything in the organization (for people who can decide). */
+export async function listApprovals(db: PrismaClient, a: { organizationId: string; userId: string; scope: "own" | "org"; status?: ApprovalStatusId; executionId?: string; limit?: number; now?: Date }): Promise<ApprovalView[]> {
+  await expireStale(db, a.organizationId, a.now ?? new Date());
+  const rows: ApprovalRow[] = await db.approvalRequest.findMany({
+    where: { organizationId: a.organizationId, ...(a.scope === "own" ? { requesterId: a.userId } : {}), ...(a.status ? { status: a.status } : {}), ...(a.executionId ? { executionId: a.executionId } : {}) },
+    orderBy: { createdAt: "desc" }, take: Math.min(Math.max(a.limit ?? 50, 1), 100), select: APPROVAL_SELECT,
+  });
+  return rows.map(toView);
+}
+
+export type DecideResult = { ok: true; approval: ApprovalView } | { ok: false; reason: "not_found" | "already_decided" | "expired" };
+
+/** Decides a pending request exactly once. Two people deciding at the same moment: one wins, the other is told it was already decided. */
+export async function decideApproval(db: PrismaClient, a: { id: string; organizationId: string; deciderId: string; decision: "APPROVED" | "REJECTED"; note?: string; now?: Date }): Promise<DecideResult> {
+  const now = a.now ?? new Date();
+  return db.$transaction(async (tx: Pick<PrismaClient, "approvalRequest" | "auditLog">) => {
+    const won = await tx.approvalRequest.updateMany({
+      where: { id: a.id, organizationId: a.organizationId, status: "PENDING", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] },
+      data: { status: a.decision, decidedById: a.deciderId, decidedAt: now, decisionNote: a.note ? clip(a.note, 1000) : null },
+    });
+    const row: ApprovalRow | null = await tx.approvalRequest.findFirst({ where: { id: a.id, organizationId: a.organizationId }, select: APPROVAL_SELECT });
+    if (!row) return { ok: false as const, reason: "not_found" as const };
+    if (won.count === 0) {
+      if (row.status === "PENDING") { await tx.approvalRequest.updateMany({ where: { id: a.id, status: "PENDING" }, data: { status: "EXPIRED" } }); return { ok: false as const, reason: "expired" as const }; }
+      return { ok: false as const, reason: row.status === "EXPIRED" ? ("expired" as const) : ("already_decided" as const) };
+    }
+    await tx.auditLog.create({ data: { organizationId: a.organizationId, actorId: a.deciderId, action: a.decision === "APPROVED" ? "council.approval.approved" : "council.approval.rejected", resourceType: "approval_request", resourceId: a.id, metadata: { category: row.category, executionId: row.executionId, requesterId: row.requesterId, agent: row.requestedByAgentKey } } });
+    return { ok: true as const, approval: toView(row) };
+  });
 }

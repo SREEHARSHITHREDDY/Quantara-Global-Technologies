@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AGENTS, TEMPLATES, councilAccess, type ConsultationMode } from "@quantara/council";
-import { getCouncilOrgAccess, getPrisma, listExecutionsForUser } from "@quantara/db";
+import { getCouncilOrgAccess, getPrisma, listApprovals, listExecutionsForUser } from "@quantara/db";
 import { can } from "@quantara/rbac";
 import { PageHero } from "@/components/site/page-hero";
 import { Badge, Card, Container } from "@/components/ui/layout";
@@ -42,6 +42,7 @@ export default async function CouncilPage() {
     );
   }
 
+  const pendingCount = (await listApprovals(db, { organizationId: caller.organizationId, userId: caller.userId, scope: can(caller.ctx, "council:approval:decide") ? "org" : "own", status: "PENDING" })).length;
   const [history, providers] = await Promise.all([
     listExecutionsForUser(db, { organizationId: caller.organizationId, userId: caller.userId, orgWide: can(caller.ctx, "council:history:read:org") }),
     councilProviderChoices(),
@@ -56,6 +57,7 @@ export default async function CouncilPage() {
             <StartForm modes={modes} agents={AGENTS.map((a) => ({ code: a.code, name: a.name }))} templates={TEMPLATES.map((t) => ({ id: t.id, name: t.name, summary: t.summary, participants: t.participants }))} providers={providers} />
           </Card>
           <div>
+            <p className="mb-4"><Link href="/council/approvals" className="text-sm font-medium text-electric-600 underline">Approvals{pendingCount > 0 ? ` (${pendingCount} waiting)` : ""}</Link></p>
             <h2 className="text-lg font-semibold text-navy-900">Recent consultations</h2>
             <ul className="mt-3 space-y-3">
               {history.length === 0 && <li className="text-sm text-slate-600">Nothing yet. Your consultations will appear here.</li>}
