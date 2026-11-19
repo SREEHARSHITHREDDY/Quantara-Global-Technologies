@@ -167,6 +167,12 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 - ✅ ARCHITECTURE, AGENTS, API, SECURITY, TESTING, DEPLOYMENT written from the code
 - ⚠️ DEPLOYMENT has not been rehearsed on a hosting platform
 
+## Open Council preview
+- ✅ New customer workspaces start on STANDARD by default (`COUNCIL_DEFAULT_PLAN`; unrecognised values close access); audited as a system action
+- ✅ `council:plan -- --all STANDARD` opens every existing customer workspace still disabled; unit-tested and DB-tested
+- ✅ Preview notice on the Council page when only the Mock provider is available; every report is labelled SIMULATED ANALYSIS
+- ⚠️ Production needs `COUNCIL_ENABLE_MOCK=1` on web and worker for the demo; with real AI keys, switch the default to DISABLED or TRIAL first
+
 ## Newsletter, SEO and error pages
 - ✅ Newsletter signup (footer): double opt-in, hashed tokens, 7-day confirm window, confirm and unsubscribe need a button press, same reply for known and unknown addresses, rate limits per IP and per email, honeypot; unit-tested and DB-tested
 - ⚠️ Delivery depends on Resend (`RESEND_API_KEY`, `MAIL_FROM`); in development the emails print in the server console

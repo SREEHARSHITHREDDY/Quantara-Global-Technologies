@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getMembershipContext } from "@quantara/auth";
-import { ensureCustomerWorkspace, getPrisma } from "@quantara/db";
+import { getPrisma } from "@quantara/db";
+import { ensureWorkspace } from "@/lib/workspace";
 import { can } from "@quantara/rbac";
 import { SecurityPanel } from "@/components/auth/security-panel";
 import { PageHero } from "@/components/site/page-hero";
@@ -17,7 +18,7 @@ export default async function AccountPage() {
   if (!session) redirect("/sign-in");
   const db = getPrisma();
   // Normally created at sign-up; this repairs the rare case where that step failed.
-  const { organizationId } = await ensureCustomerWorkspace(db, { id: session.user.id, name: session.user.name });
+  const { organizationId } = await ensureWorkspace(db, { id: session.user.id, name: session.user.name });
   const [org, ctx] = await Promise.all([db.organization.findUnique({ where: { id: organizationId }, select: { name: true } }), getMembershipContext(db, session.user.id, organizationId)]);
   const twoFactorEnabled = !!(session.user as { twoFactorEnabled?: boolean | null }).twoFactorEnabled;
   return (

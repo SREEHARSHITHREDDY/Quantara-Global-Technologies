@@ -16,6 +16,7 @@ Node 22.12+, pnpm 10, PostgreSQL 15 or 16 (tested on 15), HTTPS in front of the 
 | `RESUME_STORAGE_DIR` | yes in production | Private, persistent directory not served by the site |
 | `MAIL_FROM`, `RESEND_API_KEY` | for email | Verification and reset emails; domain must be verified in Resend. Without them no email is sent. |
 | `COUNCIL_ENABLE_MOCK` | demos only | Set to `1` to allow the Mock provider in production |
+| `COUNCIL_DEFAULT_PLAN` | optional | Plan for NEW customer workspaces: blank or `STANDARD` = open to everyone (live preview), `TRIAL` = time-limited (`COUNCIL_DEFAULT_TRIAL_DAYS`, default 14), `DISABLED` = closed. Anything else closes it. |
 | `COUNCIL_ALLOW_SELF_APPROVAL` | optional | Set to `1` only if one person must approve their own requests (for example a solo owner); off by default |
 | `COUNCIL_MOCK_SCENARIO` | optional | Worker scenario; blank means success |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `S3_*`, `TURNSTILE_SECRET_KEY`, `SENTRY_DSN`, `APP_ENCRYPTION_KEY` | not used yet | Reserved for features not built |
@@ -39,6 +40,11 @@ The worker must run, or consultations stay queued. Run both under a process supe
 3. Sign in at `/staff`, then open `/admin`.
 4. Enable the Council for a customer workspace: `pnpm --filter @quantara/db council:plan -- customer@example.com TRIAL 14`.
 5. Enter real contact details in admin Settings.
+
+## Opening the Council to everyone (live preview)
+New workspaces are open by default (`COUNCIL_DEFAULT_PLAN` blank). For a public demo set `COUNCIL_ENABLE_MOCK=1` on **both** web and worker: without it the Mock provider is off in production and the Council reports "not available". Every answer is then labelled as a simulation and the Council page shows a Preview notice.
+Workspaces that already exist keep their plan. To open all of those that are still closed: `pnpm --filter @quantara/db council:plan -- --all STANDARD`.
+When you add real AI keys or start charging, set `COUNCIL_DEFAULT_PLAN=DISABLED` (or `TRIAL`) on web before real keys go live, and review per-workspace budgets in Admin, Council, so open access cannot run up AI costs.
 
 ## Email with Resend
 1. In Resend, add the domain `quantaraglobaltech.com` (Domains, Add domain).

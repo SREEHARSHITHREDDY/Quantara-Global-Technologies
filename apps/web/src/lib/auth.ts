@@ -1,6 +1,7 @@
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { createAuth, DisabledMailer, OutboxMailer, ResendMailer, type Auth, type Mailer } from "@quantara/auth";
-import { ensureCustomerWorkspace, getPrisma } from "@quantara/db";
+import { getPrisma } from "@quantara/db";
+import { ensureWorkspace } from "@/lib/workspace";
 import { SITE_URL } from "@/lib/site";
 
 const isProd = process.env.NODE_ENV === "production";
@@ -30,7 +31,7 @@ export function getAuth(): Auth {
     secret: secret(),
     baseURL: process.env.BETTER_AUTH_URL ?? SITE_URL,
     production: isProd,
-    onUserCreated: async (u) => { await ensureCustomerWorkspace(db, u); },
+    onUserCreated: async (u) => { await ensureWorkspace(db, u); },
   });
   return instance;
 }

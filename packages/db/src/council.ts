@@ -291,6 +291,13 @@ export async function setCouncilPlan(db: PrismaClient, a: { organizationId: stri
   return { trialEndsAt };
 }
 
+/** One-off switch for workspaces created while the default was off: every customer workspace still DISABLED gets the plan. Returns how many changed. */
+export async function enableCouncilForDisabledCustomers(db: PrismaClient, a: { plan: "TRIAL" | "STANDARD" | "ENTERPRISE"; trialDays?: number; now?: Date }): Promise<number> {
+  const orgs: { id: string }[] = await db.organization.findMany({ where: { type: "CLIENT", councilPlan: "DISABLED" }, select: { id: true } });
+  for (const o of orgs) await setCouncilPlan(db, { organizationId: o.id, plan: a.plan, trialDays: a.trialDays, now: a.now });
+  return orgs.length;
+}
+
 /** The customer workspace a user belongs to, looked up by email. For staff tooling. */
 export async function findCustomerOrgByEmail(db: PrismaClient, email: string): Promise<{ organizationId: string; name: string } | null> {
   const m = await db.member.findFirst({ where: { user: { email: email.toLowerCase() }, organization: { type: "CLIENT" } }, select: { organizationId: true, organization: { select: { name: true } } } });

@@ -56,6 +56,11 @@ export default async function CouncilPage() {
       <PageHero eyebrow="Executive Council" title="Consult your executive team" description="Output is advisory. It supports a decision and does not replace professional advice." />
       <section className="bg-mist-50 py-12 sm:py-16">
         <Container className="max-w-6xl space-y-8">
+          {providers.length > 0 && providers.every((x) => x === "mock") && (
+            <p role="note" className="rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <strong>Preview.</strong> The council is running in preview mode, so every answer is a clearly labelled simulation and is not real analysis. Use it to explore how the executives work together.
+            </p>
+          )}
           <DashboardPanel d={dash} />
           <div className="grid gap-8 lg:grid-cols-[3fr_2fr]">
           <Card>
