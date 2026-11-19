@@ -4,6 +4,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { Badge, Card, Container, Section, SectionHeading } from "@/components/ui/layout";
 import { ContactCta } from "@/components/site/contact-cta";
 import { requireService } from "@/lib/content";
+import { EXECUTIVES, EXECUTIVE_GROUPS } from "@/lib/executives";
 import { COUNCIL_HREF, isLive } from "@/lib/routes";
 
 // Homepage sections: nav (layout) · hero · positioning · about · core capabilities · featured services ·
@@ -138,10 +139,26 @@ export default function HomePage() {
         </ul>
       </Section>
 
-      {isLive(COUNCIL_HREF) && (
+      {isLive("/executives") && (
         <Section tone="dark">
-          <SectionHeading tone="dark" eyebrow="Executive AI Council" title="A council of AI executives, led by a CEO agent" />
-          <ButtonLink href={COUNCIL_HREF} size="lg" className="mt-8">Enter the Executive AI Council</ButtonLink>
+          <SectionHeading tone="dark" eyebrow="Executive AI Council" title="A council of AI executives, led by a CEO agent" description="Ten executives assess a decision from their own area. The CEO weighs the views and reports where they disagree." />
+          <div className="mt-10 grid gap-6 md:grid-cols-2">
+            {EXECUTIVE_GROUPS.map((g) => (
+              <div key={g.id} className="rounded-[var(--radius-card)] border border-white/10 bg-white/5 p-6">
+                <h3 className="text-lg font-semibold text-white">{g.title}</h3>
+                <p className="mt-1 text-sm text-mist-300">{g.summary}</p>
+                <ul className="mt-4 space-y-3">
+                  {EXECUTIVES.filter((e) => e.group.id === g.id).map((e) => (
+                    <li key={e.code}><Link href={`/executives/${e.slug}`} className="block text-sm text-mist-100 hover:text-white"><span className="font-semibold text-cyan-400">{e.code}</span> {e.tagline}</Link></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <ButtonLink href="/executives" size="lg">Meet the executives</ButtonLink>
+            {isLive(COUNCIL_HREF) && <ButtonLink href={COUNCIL_HREF} size="lg" variant="outline-dark">Enter the Executive AI Council</ButtonLink>}
+          </div>
         </Section>
       )}
 

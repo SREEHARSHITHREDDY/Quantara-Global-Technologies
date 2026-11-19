@@ -36,7 +36,7 @@ export async function Footer() {
         <nav aria-label="Industries"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Industries</p>
           <ul className="mt-4 space-y-2">{industries.map((i) => <li key={i.slug}><Link className={col} href={`/industries/${i.slug}`}>{i.title}</Link></li>)}</ul></nav>
         <nav aria-label="Company"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Company</p>
-          <ul className="mt-4 space-y-2">{company_.map((i) => <li key={i.href}><Link className={col} href={i.href}>{i.label}</Link></li>)}</ul></nav>
+          <ul className="mt-4 space-y-2">{company_.map((i) => <li key={i.href}><Link className={col} href={i.href}>{i.label}</Link></li>)}<li><Link className={col} href="/executives">Executive AI Council</Link></li></ul></nav>
       </Container>
       <div className="border-t border-white/10">
         <Container className="flex flex-col gap-3 py-6 text-xs text-mist-300 sm:flex-row sm:items-center sm:justify-between">

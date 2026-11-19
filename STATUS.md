@@ -118,6 +118,12 @@ Built: `/sign-up`, `/sign-in`, `/verify-email`, `/forgot-password`, `/reset-pass
 | Access audit: exports always, and views by anyone other than the owner (`council.report.viewed` / `.exported`) | ⚠️ 1 database test written, unrun |
 | Not yet: approvals actions, PDF export | ❌ |
 
+## Executive team pages (public)
+| Item | State |
+|---|---|
+| `/executives` (4 groups, 10 cards) and `/executives/[code]` (focus, questions asked, what you receive, peers); homepage council section rebuilt as a product strip; footer link | ⚠️ builds, typechecks, 2 unit tests + route tests pass in sandbox; **not viewed in a browser** |
+| Content comes from the council package definitions; taglines are our own wording. A visible notice says assessments are simulated until a live provider is connected | ✅ by construction |
+
 ## Header and staff access
 | Item | State |
 |---|---|

@@ -32,6 +32,10 @@ describe("routes", () => {
     expect(isLive("/insights")).toBe(true);
     expect(isLive("/council")).toBe(true);
     expect(isLive("/council/reports")).toBe(false); // not built yet
+    expect(isLive("/executives")).toBe(true);
+    expect(isLive("/executives/cfo")).toBe(true);
+    expect(isLive("/executives/CFO")).toBe(false);
+    expect(isLive("/executives/unknown")).toBe(false);
   });
   it("navigation never contains a link to a page that does not exist", () => {
     for (const item of liveOnly(MAIN_NAV)) expect(isLive(item.href), item.href).toBe(true);
